@@ -18,6 +18,7 @@ export interface IAuditLog extends Document {
     | "error_reported"
     | "investigation_started"
     | "recovery_requested"
+    | "dispute_resolved"
     | "blockchain_committed";
 
   // Optional description
@@ -66,6 +67,7 @@ const auditLogSchema = new Schema<IAuditLog>(
         "error_reported",
         "investigation_started",
         "recovery_requested",
+        "dispute_resolved",
         "blockchain_committed",
       ],
       required: true,

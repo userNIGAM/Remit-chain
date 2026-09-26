@@ -8,6 +8,7 @@ import authRoutes from "./routes/authRoutes.ts";
 import userRoutes from "./routes/userRoutes.ts";
 import remittanceRoutes from "./routes/remittanceRoutes.ts";
 import disputeRoutes from "./routes/disputeRoutes.ts"
+import auditLogRoutes from "./routes/auditLogRoutes.ts";
 
 dotenv.config();
 
@@ -60,6 +61,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/remittances", remittanceRoutes);
 app.use("/api/disputes", disputeRoutes);
+app.use("/api/audit-logs", auditLogRoutes);
 
 // =====================================================
 // START SERVER

@@ -197,7 +197,7 @@ export const resolveDispute = async (req: any, res: any) => {
       await AuditLog.create({
         remittance: remittance._id,
         actor: req.userId,
-        action: "recovery_requested",
+        action: "dispute_resolved",
         description: `Dispute resolved: ${resolution}`,
         previousStatus: "recovery_requested",
         newStatus: "recovered",
