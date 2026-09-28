@@ -27,21 +27,16 @@ type Remittance = {
   sendingCurrency: string;
   exchangeRate: number;
   fee: number;
-
   expectedPayout: number;
   actualPayout?: number;
-
   payoutCurrency?: string;
   payoutMethod: string;
   channel: string;
-
   status: string;
 
-  blockchain?: {
-    network?: string;
-    transactionHash?: string;
-    verified?: boolean;
-  };
+  transactionHash?: string;
+  blockchainTxSignature?: string;
+  blockchainNetwork?: string;
 
   createdAt?: string;
   updatedAt?: string;
@@ -72,18 +67,14 @@ export default function RemittanceDetailsPage() {
   const [disputeActionLoading, setDisputeActionLoading] = useState(false);
   const [resolution, setResolution] = useState("");
 
-  // ==========================================
-  // LOAD REMITTANCE
-  // ==========================================
-
   const loadRemittance = async () => {
     try {
       setLoading(true);
       setError("");
 
-      const data = await api(`/remittances/${id}`);
+      const data = await api<{ remittance: Remittance }>(`/remittances/${id}`);
 
-      setRemittance(data.remittance || data);
+      setRemittance(data.remittance || (data as unknown as Remittance));
     } catch (error: any) {
       setError(error.message || "Failed to load remittance");
     } finally {
@@ -96,10 +87,6 @@ export default function RemittanceDetailsPage() {
       loadRemittance();
     }
   }, [id]);
-
-  // ==========================================
-  // GENERIC ACTION
-  // ==========================================
 
   const performAction = async (
     endpoint: string,
@@ -133,10 +120,6 @@ export default function RemittanceDetailsPage() {
     }
   };
 
-  // ==========================================
-  // APPROVE
-  // ==========================================
-
   const approveRemittance = async () => {
     await performAction(
       `/remittances/${id}/approve`,
@@ -144,10 +127,6 @@ export default function RemittanceDetailsPage() {
       "Remittance approved successfully",
     );
   };
-
-  // ==========================================
-  // PROCESS
-  // ==========================================
 
   const processRemittance = async () => {
     await performAction(
@@ -157,10 +136,6 @@ export default function RemittanceDetailsPage() {
     );
   };
 
-  // ==========================================
-  // READY FOR PAYOUT
-  // ==========================================
-
   const readyForPayout = async () => {
     await performAction(
       `/remittances/${id}/ready-for-payout`,
@@ -168,10 +143,6 @@ export default function RemittanceDetailsPage() {
       "Remittance is ready for payout",
     );
   };
-
-  // ==========================================
-  // PAYOUT
-  // ==========================================
 
   const completePayout = async (payout: number) => {
     if (!remittance) return;
@@ -185,10 +156,6 @@ export default function RemittanceDetailsPage() {
       },
     );
   };
-
-  // ==========================================
-  // BLOCKCHAIN COMMIT
-  // ==========================================
 
   const commitBlockchain = async () => {
     try {
@@ -205,7 +172,8 @@ export default function RemittanceDetailsPage() {
       setBlockchainResult(data);
 
       setSuccess(
-        data.message || "Remittance successfully committed to blockchain",
+        (data as any).message ||
+          "Remittance successfully committed to blockchain",
       );
 
       await loadRemittance();
@@ -215,10 +183,6 @@ export default function RemittanceDetailsPage() {
       setActionLoading(false);
     }
   };
-
-  // ==========================================
-  // VERIFY BLOCKCHAIN
-  // ==========================================
 
   const verifyBlockchain = async () => {
     try {
@@ -231,12 +195,13 @@ export default function RemittanceDetailsPage() {
       console.log("Verification result:", data);
       setVerificationResult(data);
 
-      if (data.verified) {
+      if ((data as any).verified) {
         setSuccess(
-          data.message || "Remittance blockchain verification successful",
+          (data as any).message ||
+            "Remittance blockchain verification successful",
         );
       } else {
-        setError(data.message || "Blockchain verification failed");
+        setError((data as any).message || "Blockchain verification failed");
       }
     } catch (error: any) {
       setError(error.message || "Blockchain verification failed");
@@ -245,26 +210,18 @@ export default function RemittanceDetailsPage() {
     }
   };
 
-  // ==========================================
-  // Disputes
-  // ==========================================
   const fetchDispute = async () => {
     if (!remittance) return;
 
     try {
       setLoadingDispute(true);
 
-      const data = await api("/disputes");
-
-      console.log("All disputes:", data.disputes);
-      console.log("Current remittance ID:", remittance._id);
+      const data = await api<{ disputes: any[] }>("/disputes");
 
       const currentDispute = data.disputes?.find(
         (item: any) =>
           item.remittance?._id?.toString() === remittance._id?.toString(),
       );
-
-      console.log("Current dispute:", currentDispute);
 
       setDispute(currentDispute || null);
     } catch (error: any) {
@@ -274,6 +231,7 @@ export default function RemittanceDetailsPage() {
       setLoadingDispute(false);
     }
   };
+
   useEffect(() => {
     if (remittance) {
       fetchDispute();
@@ -288,11 +246,9 @@ export default function RemittanceDetailsPage() {
       setError("");
       setSuccess("");
 
-      const data = await api(`/disputes/${dispute._id}/investigate`, {
+      await api(`/disputes/${dispute._id}/investigate`, {
         method: "PATCH",
       });
-
-      console.log("Investigation response:", data);
 
       setSuccess("Dispute investigation started");
 
@@ -314,11 +270,9 @@ export default function RemittanceDetailsPage() {
       setError("");
       setSuccess("");
 
-      const data = await api(`/disputes/${dispute._id}/recovery`, {
+      await api(`/disputes/${dispute._id}/recovery`, {
         method: "PATCH",
       });
-
-      console.log("Recovery response:", data);
 
       setSuccess("Recovery requested");
 
@@ -345,14 +299,12 @@ export default function RemittanceDetailsPage() {
       setError("");
       setSuccess("");
 
-      const data = await api(`/disputes/${dispute._id}/resolve`, {
+      await api(`/disputes/${dispute._id}/resolve`, {
         method: "PATCH",
         body: JSON.stringify({
           resolution: resolution.trim(),
         }),
       });
-
-      console.log("Resolve response:", data);
 
       setSuccess("Dispute resolved and remittance recovered");
 
@@ -368,10 +320,6 @@ export default function RemittanceDetailsPage() {
     }
   };
 
-  // ==========================================
-  // LOADING
-  // ==========================================
-
   if (loading) {
     return (
       <main className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -382,10 +330,6 @@ export default function RemittanceDetailsPage() {
       </main>
     );
   }
-
-  // ==========================================
-  // ERROR / NOT FOUND
-  // ==========================================
 
   if (!remittance) {
     return (
@@ -407,14 +351,8 @@ export default function RemittanceDetailsPage() {
     );
   }
 
-  // ==========================================
-  // RENDER
-  // ==========================================
-
   return (
     <main className="min-h-screen bg-gray-100">
-      {/* HEADER */}
-
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-5xl mx-auto px-6 py-5">
           <button
@@ -447,23 +385,17 @@ export default function RemittanceDetailsPage() {
       </header>
 
       <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
-        {/* ERROR */}
-
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4">
             {error}
           </div>
         )}
 
-        {/* SUCCESS */}
-
         {success && (
           <div className="bg-green-50 border border-green-200 text-green-700 rounded-lg p-4">
             {success}
           </div>
         )}
-
-        {/* SENDER / RECEIVER */}
 
         <section className="bg-white border border-gray-200 rounded-xl p-6">
           <h2 className="text-lg font-semibold text-gray-900">
@@ -502,8 +434,6 @@ export default function RemittanceDetailsPage() {
             </div>
           </div>
         </section>
-
-        {/* REMITTANCE DETAILS */}
 
         <section className="bg-white border border-gray-200 rounded-xl p-6">
           <h2 className="text-lg font-semibold text-gray-900">
@@ -551,16 +481,12 @@ export default function RemittanceDetailsPage() {
           </div>
         </section>
 
-        {/* ACTIONS */}
-
         <section className="bg-white border border-gray-200 rounded-xl p-6">
           <h2 className="text-lg font-semibold text-gray-900">
             Remittance Actions
           </h2>
 
           <div className="flex flex-wrap gap-3 mt-5">
-            {/* APPROVE */}
-
             {remittance.status === "created" && (
               <ActionButton
                 onClick={approveRemittance}
@@ -569,8 +495,6 @@ export default function RemittanceDetailsPage() {
                 Approve Remittance
               </ActionButton>
             )}
-
-            {/* PROCESS */}
 
             {remittance.status === "approved" && (
               <ActionButton
@@ -581,15 +505,11 @@ export default function RemittanceDetailsPage() {
               </ActionButton>
             )}
 
-            {/* READY FOR PAYOUT */}
-
             {remittance.status === "processing" && (
               <ActionButton onClick={readyForPayout} disabled={actionLoading}>
                 Ready for Payout
               </ActionButton>
             )}
-
-            {/* PAYOUT */}
 
             {remittance.status === "ready_for_payout" && (
               <div className="rounded-xl border border-gray-200 bg-white p-5">
@@ -629,23 +549,12 @@ export default function RemittanceDetailsPage() {
               </div>
             )}
 
-            {/* BLOCKCHAIN */}
-
             {remittance.status === "completed" && (
               <ActionButton onClick={commitBlockchain} disabled={actionLoading}>
                 <ShieldCheck className="w-4 h-4" />
                 Commit to Blockchain
               </ActionButton>
             )}
-
-            {/* VERIFY */}
-
-            {blockchainResult || verificationResult ? (
-              <ActionButton onClick={verifyBlockchain} disabled={actionLoading}>
-                <CheckCircle className="w-4 h-4" />
-                Verify Blockchain
-              </ActionButton>
-            ) : null}
           </div>
 
           {actionLoading && (
@@ -656,95 +565,268 @@ export default function RemittanceDetailsPage() {
           )}
         </section>
 
-        {/* BLOCKCHAIN RESULT */}
+        {(remittance.transactionHash ||
+          remittance.blockchainTxSignature ||
+          blockchainResult) && (
+          <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Blockchain Verification
+                </h2>
 
-        {blockchainResult && (
-          <section className="bg-white border border-green-200 rounded-xl p-6">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Blockchain Transaction
-            </h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Verify that the remittance record has not been tampered with.
+                </p>
+              </div>
 
-            <div className="mt-4 space-y-3 text-sm">
-              <InfoItem
-                label="Network"
-                value={
-                  blockchainResult.network ||
-                  blockchainResult.blockchain?.network ||
-                  "Solana Devnet"
-                }
-              />
-
-              <InfoItem
-                label="Transaction Signature"
-                value={
-                  blockchainResult.signature ||
-                  blockchainResult.transactionHash ||
-                  blockchainResult.blockchain?.signature ||
-                  "N/A"
-                }
-              />
+              <ShieldCheck className="h-7 w-7 text-green-600" />
             </div>
-          </section>
-        )}
 
-        {/* VERIFICATION RESULT */}
+            <div className="space-y-4">
+              <div className="rounded-lg bg-gray-50 p-4">
+                <p className="text-xs font-medium uppercase text-gray-500">
+                  Network
+                </p>
 
-        {verificationResult && (
-          <section
-            className={`border rounded-xl p-6 ${
-              verificationResult.verified
-                ? "bg-green-50 border-green-200"
-                : "bg-red-50 border-red-200"
-            } text-gray-900`}
-          >
-            <h2 className="text-lg font-semibold text-gray-900">
-              Blockchain Verification
-            </h2>
+                <p className="mt-1 font-medium text-gray-900">
+                  {remittance.blockchainNetwork ||
+                    blockchainResult?.blockchain?.network ||
+                    "Solana Devnet"}
+                </p>
+              </div>
 
-            <div className="mt-4 space-y-3 text-sm text-gray-700">
-              <p>
-                <span className="font-semibold text-gray-900">Verified:</span>{" "}
-                <span
-                  className={
+              {remittance.transactionHash && (
+                <div className="rounded-lg bg-gray-50 p-4">
+                  <p className="text-xs font-medium uppercase text-gray-500">
+                    Transaction Hash
+                  </p>
+
+                  <p className="mt-1 break-all font-mono text-sm text-gray-900">
+                    {remittance.transactionHash}
+                  </p>
+                </div>
+              )}
+
+              {remittance.blockchainTxSignature && (
+                <div className="rounded-lg bg-gray-50 p-4">
+                  <p className="text-xs font-medium uppercase text-gray-500">
+                    Solana Transaction Signature
+                  </p>
+
+                  <p className="mt-1 break-all font-mono text-sm text-gray-900">
+                    {remittance.blockchainTxSignature}
+                  </p>
+                </div>
+              )}
+
+              {blockchainResult && (
+                <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+
+                    <p className="font-medium text-green-800">
+                      Transaction committed to blockchain
+                    </p>
+                  </div>
+
+                  <p className="mt-2 break-all font-mono text-sm text-green-700">
+                    Signature: {blockchainResult.blockchain?.signature}
+                  </p>
+                </div>
+              )}
+
+              <button
+                onClick={verifyBlockchain}
+                disabled={actionLoading}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-3 font-medium text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {actionLoading ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Verifying Blockchain...
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="h-5 w-5" />
+                    Verify Blockchain
+                  </>
+                )}
+              </button>
+            </div>
+
+            {verificationResult && (
+              <div className="mt-6 border-t border-gray-200 pt-6">
+                <h3 className="mb-4 text-md font-semibold text-gray-900">
+                  Verification Result
+                </h3>
+
+                <div
+                  className={`rounded-lg border p-4 ${
                     verificationResult.verified
-                      ? "font-semibold text-green-600"
-                      : "font-semibold text-red-600"
-                  }
+                      ? "border-green-200 bg-green-50"
+                      : "border-red-200 bg-red-50"
+                  }`}
                 >
-                  {verificationResult.verified ? "Yes" : "No"}
-                </span>
-              </p>
+                  <div className="flex items-center gap-3">
+                    {verificationResult.verified ? (
+                      <CheckCircle className="h-6 w-6 text-green-600" />
+                    ) : (
+                      <ShieldCheck className="h-6 w-6 text-red-600" />
+                    )}
 
-              {verificationResult.hashVerification?.originalHash && (
-                <p className="break-all text-gray-700">
-                  <span className="font-semibold text-gray-900">
-                    Original Hash:
-                  </span>{" "}
-                  {verificationResult.hashVerification.originalHash}
-                </p>
-              )}
+                    <div>
+                      <p
+                        className={`font-semibold ${
+                          verificationResult.verified
+                            ? "text-green-800"
+                            : "text-red-800"
+                        }`}
+                      >
+                        {verificationResult.verified
+                          ? "Transaction Verified"
+                          : "Transaction Verification Failed"}
+                      </p>
 
-              {verificationResult.hashVerification?.recalculatedHash && (
-                <p className="break-all text-gray-700">
-                  <span className="font-semibold text-gray-900">
-                    Recalculated Hash:
-                  </span>{" "}
-                  {verificationResult.hashVerification.recalculatedHash}
-                </p>
-              )}
+                      <p
+                        className={`text-sm ${
+                          verificationResult.verified
+                            ? "text-green-700"
+                            : "text-red-700"
+                        }`}
+                      >
+                        {verificationResult.message}
+                      </p>
+                    </div>
+                  </div>
+                </div>
 
-              {verificationResult.message && (
-                <p>
-                  <span className="font-semibold text-gray-900">Message:</span>{" "}
-                  <span className="text-gray-700">
-                    {verificationResult.message}
-                  </span>
-                </p>
-              )}
-            </div>
-          </section>
+                {/* Live tamper check */}
+                {verificationResult.liveTamperCheck && (
+                  <div
+                    className={`mt-4 rounded-lg border p-4 ${
+                      verificationResult.liveTamperCheck.matches
+                        ? "border-green-200 bg-green-50"
+                        : "border-red-200 bg-red-50"
+                    }`}
+                  >
+                    <p
+                      className={`font-medium ${
+                        verificationResult.liveTamperCheck.matches
+                          ? "text-green-800"
+                          : "text-red-800"
+                      }`}
+                    >
+                      {verificationResult.liveTamperCheck.matches
+                        ? "Live data matches on-chain snapshot"
+                        : "Live data differs from on-chain snapshot — possible tampering"}
+                    </p>
+                  </div>
+                )}
+
+                {verificationResult.hashVerification && (
+                  <div className="mt-4 rounded-lg border border-gray-200 p-4">
+                    <h4 className="mb-3 font-medium text-gray-900">
+                      Hash Verification
+                    </h4>
+
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-xs font-medium text-gray-500">
+                          Original Hash
+                        </p>
+
+                        <p className="mt-1 break-all font-mono text-xs text-gray-700">
+                          {verificationResult.hashVerification.originalHash}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-xs font-medium text-gray-500">
+                          Recalculated Hash
+                        </p>
+
+                        <p className="mt-1 break-all font-mono text-xs text-gray-700">
+                          {verificationResult.hashVerification.recalculatedHash}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {verificationResult.hashVerification.matches ? (
+                          <>
+                            <CheckCircle className="h-5 w-5 text-green-600" />
+                            <span className="font-medium text-green-700">
+                              Hash matches
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <ShieldCheck className="h-5 w-5 text-red-600" />
+                            <span className="font-medium text-red-700">
+                              Hash does not match
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {verificationResult.blockchainVerification && (
+                  <div className="mt-4 rounded-lg border border-gray-200 p-4">
+                    <h4 className="mb-3 font-medium text-gray-900">
+                      Blockchain Status
+                    </h4>
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <div className="rounded-lg bg-gray-50 p-3">
+                        <p className="text-xs text-gray-500">
+                          Transaction Found
+                        </p>
+
+                        <p className="mt-1 font-medium">
+                          {verificationResult.blockchainVerification.found
+                            ? "Yes"
+                            : "No"}
+                        </p>
+                      </div>
+
+                      <div className="rounded-lg bg-gray-50 p-3">
+                        <p className="text-xs text-gray-500">Finalized</p>
+
+                        <p className="mt-1 font-medium">
+                          {verificationResult.blockchainVerification.finalized
+                            ? "Yes"
+                            : "No"}
+                        </p>
+                      </div>
+
+                      <div className="rounded-lg bg-gray-50 p-3">
+                        <p className="text-xs text-gray-500">Slot</p>
+
+                        <p className="mt-1 font-medium">
+                          {verificationResult.blockchainVerification.slot ??
+                            "N/A"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
+                      <p className="text-xs font-medium text-gray-500">
+                        Blockchain Signature
+                      </p>
+
+                      <p className="mt-1 break-all font-mono text-xs text-gray-700">
+                        {verificationResult.blockchainVerification.signature}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
-        {/* DISPUTE / PAYOUT ERROR */}
+
         {[
           "error_reported",
           "investigation",
@@ -878,7 +960,6 @@ export default function RemittanceDetailsPage() {
                   </div>
                 )}
 
-                {/* OPEN */}
                 {dispute.status === "open" && (
                   <div className="mt-6">
                     <button
@@ -894,7 +975,6 @@ export default function RemittanceDetailsPage() {
                   </div>
                 )}
 
-                {/* INVESTIGATION */}
                 {dispute.status === "investigation" && (
                   <div className="mt-6">
                     <button
@@ -910,7 +990,6 @@ export default function RemittanceDetailsPage() {
                   </div>
                 )}
 
-                {/* RECOVERY REQUESTED */}
                 {dispute.status === "recovery_requested" && (
                   <div className="mt-6">
                     <label className="mb-2 block text-sm font-medium text-gray-700">
@@ -938,7 +1017,6 @@ export default function RemittanceDetailsPage() {
                   </div>
                 )}
 
-                {/* RESOLVED */}
                 {dispute.status === "resolved" && (
                   <div className="mt-6 rounded-lg bg-green-50 p-4">
                     <p className="font-medium text-green-800">
@@ -970,15 +1048,12 @@ export default function RemittanceDetailsPage() {
             </div>
           </section>
         )}
+
         <AuditTimeline remittanceId={remittance._id} />
       </div>
     </main>
   );
 }
-
-// ==========================================
-// INFO ITEM
-// ==========================================
 
 function InfoItem({ label, value }: { label: string; value: string }) {
   return (
@@ -991,10 +1066,6 @@ function InfoItem({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-
-// ==========================================
-// ACTION BUTTON
-// ==========================================
 
 function ActionButton({
   children,

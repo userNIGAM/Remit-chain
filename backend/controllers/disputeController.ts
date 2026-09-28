@@ -3,12 +3,34 @@ import Dispute from "../models/Dispute.js";
 import AuditLog from "../models/AuditLog.js";
 
 // =====================================================
-// GET ALL DISPUTES
+// GET DISPUTES (role-aware)
 // =====================================================
 
 export const getDisputes = async (req: any, res: any) => {
   try {
-    const disputes = await Dispute.find()
+    const userId = req.userId;
+    const userRole = req.userRole;
+
+    let query: any = {};
+
+    if (["admin", "supervisor", "agent"].includes(userRole)) {
+      query = {};
+    } else if (userRole === "sender" || userRole === "receiver") {
+      const ownedRemittances = await Remittance.find({
+        $or: [{ sender: userId }, { receiver: userId }],
+      }).select("_id");
+
+      query = {
+        remittance: { $in: ownedRemittances.map((r) => r._id) },
+      };
+    } else {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to view disputes",
+      });
+    }
+
+    const disputes = await Dispute.find(query)
       .populate("reportedBy", "name email role")
       .populate("remittance")
       .sort({ createdAt: -1 });
@@ -20,7 +42,6 @@ export const getDisputes = async (req: any, res: any) => {
     });
   } catch (error) {
     console.error("Get disputes error:", error);
-
     return res.status(500).json({
       success: false,
       message: "Failed to get disputes",
@@ -35,7 +56,6 @@ export const getDisputes = async (req: any, res: any) => {
 export const startInvestigation = async (req: any, res: any) => {
   try {
     const { id } = req.params;
-
     const dispute = await Dispute.findById(id);
 
     if (!dispute) {
@@ -53,11 +73,9 @@ export const startInvestigation = async (req: any, res: any) => {
     }
 
     dispute.status = "investigation";
-
     await dispute.save();
 
     const remittance = await Remittance.findById(dispute.remittance);
-
     if (remittance) {
       remittance.status = "investigation";
       await remittance.save();
@@ -79,7 +97,6 @@ export const startInvestigation = async (req: any, res: any) => {
     });
   } catch (error) {
     console.error("Start investigation error:", error);
-
     return res.status(500).json({
       success: false,
       message: "Failed to start investigation",
@@ -94,7 +111,6 @@ export const startInvestigation = async (req: any, res: any) => {
 export const requestRecovery = async (req: any, res: any) => {
   try {
     const { id } = req.params;
-
     const dispute = await Dispute.findById(id);
 
     if (!dispute) {
@@ -112,11 +128,9 @@ export const requestRecovery = async (req: any, res: any) => {
     }
 
     dispute.status = "recovery_requested";
-
     await dispute.save();
 
     const remittance = await Remittance.findById(dispute.remittance);
-
     if (remittance) {
       remittance.status = "recovery_requested";
       await remittance.save();
@@ -138,7 +152,6 @@ export const requestRecovery = async (req: any, res: any) => {
     });
   } catch (error) {
     console.error("Request recovery error:", error);
-
     return res.status(500).json({
       success: false,
       message: "Failed to request recovery",
@@ -146,12 +159,15 @@ export const requestRecovery = async (req: any, res: any) => {
   }
 };
 
+// =====================================================
+// RESOLVE DISPUTE
+// =====================================================
+
 export const resolveDispute = async (req: any, res: any) => {
   try {
     const { id } = req.params;
     const { resolution } = req.body;
 
-    // 1. Validate resolution
     if (!resolution || resolution.trim() === "") {
       return res.status(400).json({
         success: false,
@@ -159,9 +175,7 @@ export const resolveDispute = async (req: any, res: any) => {
       });
     }
 
-    // 2. Find dispute
     const dispute = await Dispute.findById(id);
-
     if (!dispute) {
       return res.status(404).json({
         success: false,
@@ -169,7 +183,6 @@ export const resolveDispute = async (req: any, res: any) => {
       });
     }
 
-    // 3. Only recovery_requested disputes can be resolved
     if (dispute.status !== "recovery_requested") {
       return res.status(400).json({
         success: false,
@@ -177,23 +190,18 @@ export const resolveDispute = async (req: any, res: any) => {
       });
     }
 
-    // 4. Update dispute
     dispute.status = "resolved";
     dispute.resolution = resolution;
     dispute.resolvedBy = req.userId;
     dispute.resolvedAt = new Date();
-
     await dispute.save();
 
-    // 5. Find related remittance
     const remittance = await Remittance.findById(dispute.remittance);
 
     if (remittance) {
       remittance.status = "recovered";
-
       await remittance.save();
 
-      // 6. Audit log
       await AuditLog.create({
         remittance: remittance._id,
         actor: req.userId,
@@ -218,7 +226,6 @@ export const resolveDispute = async (req: any, res: any) => {
     });
   } catch (error) {
     console.error("Resolve dispute error:", error);
-
     return res.status(500).json({
       success: false,
       message: "Failed to resolve dispute",

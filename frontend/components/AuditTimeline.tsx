@@ -34,12 +34,13 @@ export default function AuditTimeline({
       setLoading(true);
       setError("");
 
-      const data = await api(`/audit-logs/remittance/${remittanceId}`);
+      const data = await api<{ logs: AuditLog[] }>(
+        `/audit-logs/remittance/${remittanceId}`,
+      );
 
       setLogs(data.logs || []);
     } catch (error: any) {
       console.error("Audit log error:", error);
-
       setError(error.message || "Failed to load transaction history");
     } finally {
       setLoading(false);
@@ -73,10 +74,16 @@ export default function AuditTimeline({
     );
   }
 
+  // Owners may not have permission on some routes; just show empty state.
   if (error) {
     return (
-      <section className="bg-white border border-red-200 rounded-xl p-6">
-        <p className="text-red-600">{error}</p>
+      <section className="bg-white border border-gray-200 rounded-xl p-6">
+        <h2 className="text-lg font-semibold text-gray-900">
+          Transaction History
+        </h2>
+        <div className="mt-5 rounded-lg bg-gray-50 p-5 text-sm text-gray-500">
+          No transaction history available.
+        </div>
       </section>
     );
   }
@@ -100,7 +107,7 @@ export default function AuditTimeline({
           {logs.map((log, index) => (
             <div key={log._id} className="relative flex gap-4 pb-8 last:pb-0">
               {index !== logs.length - 1 && (
-                <div className="absolute left-[11px] top-7 h-full w-px bg-gray-200" />
+                <div className="absolute left-2.75 top-7 h-full w-px bg-gray-200" />
               )}
 
               <div className="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-100">

@@ -10,6 +10,8 @@ import {
   commitToBlockchain,
   verifyRemittanceBlockchain,
   getRemittanceById,
+  getRemittances,
+  getRemittanceStats,
   // tamperTestRemittance,
 } from "../controllers/remittanceController.js";
 
@@ -17,7 +19,16 @@ import { protect } from "../middleware/authMiddleware.js";
 import { requireRole } from "../middleware/roleMiddleware.js";
 
 const router = Router();
-
+router.get(
+  "/",
+  protect,
+  getRemittances
+);
+router.get(
+  "/stats",
+  protect,
+  getRemittanceStats
+);
 router.get("/receiver", protect, findReceiver);
 router.get("/:id", protect, getRemittanceById);
 router.post("/", protect, createRemittance);

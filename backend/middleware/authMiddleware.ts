@@ -42,14 +42,6 @@ export const protect = (
       role: string;
     };
 
-    // 5. Store authenticated user's information
-    // on the request.
-    //
-    // Controllers can access:
-    //
-    // req.userId
-    // req.userRole
-    //
     (req as any).userId = decoded.userId;
     (req as any).userRole = decoded.role;
 

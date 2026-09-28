@@ -1,4 +1,5 @@
 import { type Request, type Response } from "express";
+import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
@@ -6,12 +7,34 @@ import User from "../models/User.js";
 import generateRemitId from "../utils/generateRemitId.js";
 
 // =====================================================
+// COOKIE OPTIONS
+// =====================================================
+
+const isProd = process.env.NODE_ENV === "production";
+
+const TOKEN_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: isProd,
+  sameSite: isProd ? ("none" as const) : ("lax" as const),
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+  path: "/",
+};
+
+// CSRF cookie MUST be readable by JavaScript
+const CSRF_COOKIE_OPTIONS = {
+  httpOnly: false,
+  secure: isProd,
+  sameSite: isProd ? ("none" as const) : ("lax" as const),
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+  path: "/",
+};
+
+// =====================================================
 // REGISTER
 // =====================================================
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
-    // 1. Get information from request body
     const {
       name,
       email,
@@ -23,17 +46,14 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       preferredPayoutMethod,
     } = req.body;
 
-    // 2. Validate required fields
     if (!name || !email || !phone || !password) {
       res.status(400).json({
         success: false,
         message: "Name, email, phone and password are required",
       });
-
       return;
     }
 
-    // 3. Check whether email already exists
     const existingEmail = await User.findOne({
       email: email.toLowerCase(),
     });
@@ -43,69 +63,50 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         success: false,
         message: "Email already registered",
       });
-
       return;
     }
 
-    // 4. Check whether phone already exists
-    const existingPhone = await User.findOne({
-      phone,
-    });
+    const existingPhone = await User.findOne({ phone });
 
     if (existingPhone) {
       res.status(400).json({
         success: false,
         message: "Phone number already registered",
       });
-
       return;
     }
 
-    // 5. Generate a public Remit ID
-    let remitId = generateRemitId();
+    if (role !== "sender" && role !== "receiver") {
+      res.status(400).json({
+        success: false,
+        message: "Public registration is only available for sender or receiver",
+      });
+      return;
+    }
 
-    // Make sure the generated ID does not already exist
+    const userRole = role;
+
+    let remitId = generateRemitId();
     while (await User.findOne({ remitId })) {
       remitId = generateRemitId();
     }
 
-    // 6. Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // 7. Determine role
-    //
-    // For now:
-    // - If no role is supplied, user becomes receiver.
-    //
-    // Later, we will restrict who can create
-    // agent/supervisor/admin accounts.
-const userRole =
-  role === "sender"
-    ? "sender"
-    : "receiver";
-
-    // 8. Create user
     const user = await User.create({
       name,
       email: email.toLowerCase(),
       phone,
       password: hashedPassword,
-
       role: userRole,
-
       address,
       country,
-
       remitId,
-
       verificationStatus: "pending",
-
       preferredPayoutMethod,
-
       isActive: true,
     });
 
-    // 9. Remove password before sending user data
     const userResponse = {
       id: user._id,
       name: user.name,
@@ -117,7 +118,6 @@ const userRole =
       preferredPayoutMethod: user.preferredPayoutMethod,
     };
 
-    // 10. Send response
     res.status(201).json({
       success: true,
       message: "User registered successfully",
@@ -125,7 +125,6 @@ const userRole =
     });
   } catch (error) {
     console.error("Register error:", error);
-
     res.status(500).json({
       success: false,
       message: "Server error during registration",
@@ -137,50 +136,51 @@ const userRole =
 // LOGIN
 // =====================================================
 
-export const login = async (req: Request, res: Response): Promise<void> => {
+type LoginRequestBody = {
+  email?: unknown;
+  password?: unknown;
+};
+
+export const login = async (
+  req: Request<Record<string, string>, unknown, LoginRequestBody>,
+  res: Response,
+): Promise<void> => {
   try {
-    // 1. Get login information
     const { email, password } = req.body;
 
-    // 2. Validate input
-    if (!email || !password) {
+    if (
+      typeof email !== "string" ||
+      typeof password !== "string" ||
+      !email.trim() ||
+      !password
+    ) {
       res.status(400).json({
         success: false,
         message: "Email and password are required",
       });
-
       return;
     }
 
-    // 3. Find user
-    //
-    // We explicitly select password because later we may
-    // choose to exclude it from normal queries.
     const user = await User.findOne({
-      email: email.toLowerCase(),
+      email: email.trim().toLowerCase(),
     }).select("+password");
 
-    // 4. Check user
     if (!user) {
       res.status(401).json({
         success: false,
         message: "Invalid email or password",
       });
-
       return;
     }
 
-    // 5. Check whether account is active
     if (!user.isActive) {
       res.status(403).json({
         success: false,
         message: "Account is disabled",
       });
-
       return;
     }
 
-    // 6. Compare password with hashed password
     const passwordMatch = await bcrypt.compare(password, user.password);
 
     if (!passwordMatch) {
@@ -188,11 +188,9 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         success: false,
         message: "Invalid email or password",
       });
-
       return;
     }
 
-    // 7. Generate JWT
     const secret = process.env.JWT_SECRET;
 
     if (!secret) {
@@ -200,7 +198,6 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         success: false,
         message: "JWT secret is not configured",
       });
-
       return;
     }
 
@@ -210,26 +207,16 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         role: user.role,
       },
       secret,
-      {
-        expiresIn: "7d",
-      },
+      { expiresIn: "7d" },
     );
 
-    // 8. Store JWT inside HTTP-only cookie
-    res.cookie("token", token, {
-      httpOnly: true,
+    // JWT inside HTTP-only cookie
+    res.cookie("token", token, TOKEN_COOKIE_OPTIONS);
 
-      // In production with HTTPS:
-      // secure: true
-      secure: process.env.NODE_ENV === "production",
+    // CSRF token (readable by the frontend)
+    const csrfToken = crypto.randomBytes(32).toString("hex");
+    res.cookie("csrfToken", csrfToken, CSRF_COOKIE_OPTIONS);
 
-      // Helps protect against CSRF
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
-
-    // 9. Don't send password to frontend
     const userResponse = {
       id: user._id,
       name: user.name,
@@ -241,7 +228,6 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       preferredPayoutMethod: user.preferredPayoutMethod,
     };
 
-    // 10. Response
     res.status(200).json({
       success: true,
       message: "Login successful",
@@ -249,7 +235,6 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     });
   } catch (error) {
     console.error("Login error:", error);
-
     res.status(500).json({
       success: false,
       message: "Server error during login",
@@ -263,10 +248,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
 export const getMe = async (req: Request, res: Response): Promise<void> => {
   try {
-    // authMiddleware will put the user's ID here
     const userId = (req as any).userId;
-
-    // Find user
     const user = await User.findById(userId).select("-password");
 
     if (!user) {
@@ -274,7 +256,6 @@ export const getMe = async (req: Request, res: Response): Promise<void> => {
         success: false,
         message: "User not found",
       });
-
       return;
     }
 
@@ -284,7 +265,6 @@ export const getMe = async (req: Request, res: Response): Promise<void> => {
     });
   } catch (error) {
     console.error("Get me error:", error);
-
     res.status(500).json({
       success: false,
       message: "Server error",
@@ -297,8 +277,8 @@ export const getMe = async (req: Request, res: Response): Promise<void> => {
 // =====================================================
 
 export const logout = (req: Request, res: Response): void => {
-  // Delete authentication cookie
-  res.clearCookie("token");
+  res.clearCookie("token", TOKEN_COOKIE_OPTIONS);
+  res.clearCookie("csrfToken", CSRF_COOKIE_OPTIONS);
 
   res.status(200).json({
     success: true,

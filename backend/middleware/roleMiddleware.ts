@@ -1,20 +1,5 @@
 import { type Request, type Response, type NextFunction } from "express";
 
-// =====================================================
-// ROLE AUTHORIZATION MIDDLEWARE
-// =====================================================
-//
-// Authentication answers:
-//
-// "Who are you?"
-//
-// Role authorization answers:
-//
-// "Are you allowed to do this?"
-//
-// protect middleware -> checks JWT
-// requireRole       -> checks user's role
-// =====================================================
 
 export const requireRole = (
   ...allowedRoles: string[]

@@ -12,10 +12,10 @@ import { requireRole } from "../middleware/roleMiddleware.js";
 
 const router = Router();
 
-// Get disputes
-router.get("/", protect, requireRole("admin", "supervisor"), getDisputes);
+// Role-aware listing (staff = all, users = own)
+router.get("/", protect, getDisputes);
 
-// Start investigation
+// State transitions — staff only
 router.patch(
   "/:id/investigate",
   protect,
@@ -23,7 +23,6 @@ router.patch(
   startInvestigation,
 );
 
-// Request recovery
 router.patch(
   "/:id/recovery",
   protect,
@@ -35,7 +34,7 @@ router.patch(
   "/:id/resolve",
   protect,
   requireRole("admin", "supervisor"),
-  resolveDispute
+  resolveDispute,
 );
 
 export default router;
