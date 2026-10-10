@@ -15,6 +15,7 @@ import {
 
 import { api } from "@/lib/api";
 import { getRoleHomeRoute, isUserRole, type UserRole } from "@/lib/roles";
+import RoleNavbar from "@/components/navigation/RoleNavbar";
 
 type RoleDashboardProps = {
   roleParam: string;
@@ -139,17 +140,7 @@ export default function RoleDashboard({ roleParam }: RoleDashboardProps) {
 
   return (
     <main className="min-h-screen bg-gray-50">
-      <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <Link href="/" className="text-lg font-bold text-gray-900">
-            RemitChain
-          </Link>
-          <div className="text-right">
-            <p className="font-medium text-gray-900">{user.name}</p>
-            <p className="text-sm capitalize text-gray-500">{user.role}</p>
-          </div>
-        </div>
-      </header>
+      <RoleNavbar user={user} />
 
       <div className="mx-auto max-w-6xl px-6 py-10">
         <section className="border-b border-gray-200 pb-8">

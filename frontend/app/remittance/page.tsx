@@ -2,14 +2,12 @@
 
 import {
   AlertCircle,
-  CheckCircle,
   Clock,
   Eye,
   Loader2,
   RefreshCw,
   Search,
   ShieldCheck,
-  XCircle,
 } from "lucide-react";
 
 import Link from "next/link";
@@ -37,6 +35,7 @@ type Remittance = {
   actualPayout?: number;
   payoutCurrency?: string;
   payoutMethod: string;
+  payoutBank?: string;
   channel: string;
   status: string;
   transactionHash?: string;
@@ -60,15 +59,17 @@ export default function RemittancesPage() {
       const data = await api<{ remittances: Remittance[] }>("/remittances");
 
       setRemittances(data.remittances || []);
-    } catch (error: any) {
-      setError(error.message || "Failed to load remittances");
+    } catch (error: unknown) {
+      setError(
+        error instanceof Error ? error.message : "Failed to load remittances",
+      );
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadRemittances();
+    void Promise.resolve().then(loadRemittances);
   }, []);
 
   const filteredRemittances = remittances.filter((remittance) => {
@@ -292,6 +293,12 @@ export default function RemittancesPage() {
                               {Number(remittance.actualPayout).toLocaleString()}
                             </p>
                           )}
+
+                        {remittance.payoutBank && (
+                          <p className="mt-1 text-xs text-gray-500">
+                            Bank: {remittance.payoutBank}
+                          </p>
+                        )}
                       </td>
 
                       <td className="whitespace-nowrap px-6 py-4">

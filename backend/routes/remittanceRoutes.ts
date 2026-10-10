@@ -12,27 +12,52 @@ import {
   getRemittanceById,
   getRemittances,
   getRemittanceStats,
-  // tamperTestRemittance,
 } from "../controllers/remittanceController.js";
 
 import { protect } from "../middleware/authMiddleware.js";
 import { requireRole } from "../middleware/roleMiddleware.js";
 
 const router = Router();
+
+// =====================================================
+// READ
+// =====================================================
+
+// Role-aware list: senders/receivers only ever see their own side.
+router.get("/", protect, getRemittances);
+
+// Role-aware counters. Staff see the whole system, customers see their own.
+router.get("/stats", protect, getRemittanceStats);
+
+// Receiver lookup. Senders, agents, supervisors and admins may all resolve a
+// receiver for a new remittance; receivers have no reason to.
 router.get(
+  "/receiver",
+  protect,
+  requireRole("sender", "agent", "supervisor", "admin"),
+  findReceiver,
+);
+
+router.get("/:id", protect, getRemittanceById);
+
+// =====================================================
+// CREATE
+// =====================================================
+
+// Senders create online remittances; operations staff create branch
+// (agent channel) remittances on behalf of a customer.
+router.post(
   "/",
   protect,
-  getRemittances
+  requireRole("sender", "agent", "supervisor", "admin"),
+  createRemittance,
 );
-router.get(
-  "/stats",
-  protect,
-  getRemittanceStats
-);
-router.get("/receiver", protect, findReceiver);
-router.get("/:id", protect, getRemittanceById);
-router.post("/", protect, createRemittance);
 
+// =====================================================
+// LIFECYCLE
+// =====================================================
+
+// Approving is a supervisory act — agents must not be able to self-approve.
 router.patch(
   "/:id/approve",
   protect,
@@ -61,6 +86,12 @@ router.post(
   completePayout,
 );
 
+// =====================================================
+// BLOCKCHAIN
+// =====================================================
+
+// Committing anchors a tamper-evident record, so it stays with supervisory
+// roles. There is deliberately no route that mutates a committed record.
 router.post(
   "/:id/blockchain",
   protect,
@@ -68,13 +99,7 @@ router.post(
   commitToBlockchain,
 );
 
+// Verification is read-only and every role may confirm its own transfers.
 router.get("/:id/verify-blockchain", protect, verifyRemittanceBlockchain);
-
-// router.patch(
-//   "/:id/tamper-test",
-//   protect,
-//   requireRole("admin"),
-//   tamperTestRemittance
-// );
 
 export default router;

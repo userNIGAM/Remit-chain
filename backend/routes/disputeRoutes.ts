@@ -2,6 +2,7 @@ import { Router } from "express";
 
 import {
   getDisputes,
+  getDisputeForRemittance,
   startInvestigation,
   requestRecovery,
   resolveDispute,
@@ -12,10 +13,22 @@ import { requireRole } from "../middleware/roleMiddleware.js";
 
 const router = Router();
 
-// Role-aware listing (staff = all, users = own)
-router.get("/", protect, getDisputes);
+// =====================================================
+// READ
+// =====================================================
 
-// State transitions — staff only
+// Full dispute queue. Oversight is a supervisory responsibility, so agents are
+// not listed here.
+router.get("/", protect, requireRole("admin", "supervisor"), getDisputes);
+
+// Dispute attached to a single remittance. Available to the sender, the
+// receiver and staff so they can see why a payout was blocked.
+router.get("/remittance/:id", protect, getDisputeForRemittance);
+
+// =====================================================
+// STATE TRANSITIONS — supervisory only
+// =====================================================
+
 router.patch(
   "/:id/investigate",
   protect,

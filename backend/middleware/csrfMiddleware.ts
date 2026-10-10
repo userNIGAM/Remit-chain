@@ -1,3 +1,5 @@
+import crypto from "node:crypto";
+
 import { type Request, type Response, type NextFunction } from "express";
 
 // =====================================================
@@ -22,7 +24,9 @@ const SAFE_METHODS = ["GET", "HEAD", "OPTIONS"];
 
 // Endpoints that initiate a session have no CSRF token yet
 // and are already protected by credentials in the body.
-const CSRF_EXEMPT_PATHS = ["/api/auth/login", "/api/auth/register"];
+// Compared with strict equality so a lookalike path such as
+// "/api/auth/login-anything" cannot inherit the exemption.
+const CSRF_EXEMPT_PATHS = new Set(["/api/auth/login", "/api/auth/register"]);
 
 export const csrfProtection = (
   req: Request,
@@ -36,13 +40,14 @@ export const csrfProtection = (
   }
 
   // 2. Login/register are exempt — no session exists yet
-  const fullPath = req.originalUrl.split("?")[0] ?? "";
-  if (CSRF_EXEMPT_PATHS.some((p) => fullPath.startsWith(p))) {
+  const fullPath = (req.originalUrl.split("?")[0] ?? "").replace(/\/+$/, "");
+  if (CSRF_EXEMPT_PATHS.has(fullPath)) {
     next();
     return;
   }
 
-  // 3. Both values must be present and must match
+  // 3. Both values must be present and must match.
+  //    The comparison is length-checked first so the check stays constant time.
   const cookieToken = req.cookies?.csrfToken;
   const headerToken = req.headers["x-csrf-token"];
 
@@ -50,8 +55,8 @@ export const csrfProtection = (
     typeof cookieToken !== "string" ||
     typeof headerToken !== "string" ||
     cookieToken.length === 0 ||
-    headerToken.length === 0 ||
-    cookieToken !== headerToken
+    cookieToken.length !== headerToken.length ||
+    !crypto.timingSafeEqual(Buffer.from(cookieToken), Buffer.from(headerToken))
   ) {
     res.status(403).json({
       success: false,

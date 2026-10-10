@@ -1,5 +1,5 @@
-import RoleDashboard from "@/components/RoleDashboard";
+import SenderDashboard from "@/components/dashboards/sender/SenderDashboard";
 
 export default function SenderDashboardPage() {
-  return <RoleDashboard roleParam="sender" />;
+  return <SenderDashboard />;
 }

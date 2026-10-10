@@ -17,17 +17,16 @@ const router = Router();
 // USER MANAGEMENT
 // =====================================================
 
-// Get all users
+// Supervisors get read access for verification purposes only.
 router.get("/", protect, requireRole("admin", "supervisor"), getUsers);
 
-// Get single user
 router.get("/:id", protect, requireRole("admin", "supervisor"), getUserById);
 
-// Create staff account
-// Admin only
+// Creating privileged accounts is admin-only: privileged roles are never
+// self-service through public registration.
 router.post("/staff", protect, requireRole("admin"), createStaff);
 
-// Verify user
+// KYC decision on customer accounts.
 router.patch(
   "/:id/verify",
   protect,
@@ -35,8 +34,7 @@ router.patch(
   verifyUser,
 );
 
-// Activate / deactivate user
-// Admin only
+// Activating / deactivating accounts is admin-only.
 router.patch("/:id/status", protect, requireRole("admin"), updateUserStatus);
 
 export default router;

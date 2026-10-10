@@ -1,5 +1,5 @@
-import RoleDashboard from "@/components/RoleDashboard";
+import SupervisorDashboard from "@/components/dashboards/supervisor/SupervisorDashboard";
 
 export default function SupervisorDashboardPage() {
-  return <RoleDashboard roleParam="supervisor" />;
+  return <SupervisorDashboard />;
 }

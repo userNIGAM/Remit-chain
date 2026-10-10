@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   AlertTriangle,
   ArrowRight,
@@ -11,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { api } from "@/lib/api";
+import { isUserRole, type UserRole } from "@/lib/roles";
 
 type Remittance = {
   _id: string;
@@ -53,8 +55,13 @@ type Dispute = {
   updatedAt: string;
 };
 
+type CurrentUser = {
+  role: UserRole;
+};
+
 export default function DisputesPage() {
   const [disputes, setDisputes] = useState<Dispute[]>([]);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -70,22 +77,29 @@ export default function DisputesPage() {
       setLoading(true);
       setError("");
 
-      const data = await api("/disputes");
+      const [data, session] = await Promise.all([
+        api<{ disputes: Dispute[] }>("/disputes"),
+        api<{ user: { role?: unknown } }>("/auth/me"),
+      ]);
 
-      console.log("Disputes:", data);
+      if (isUserRole(session.user?.role)) {
+        setCurrentUser({ role: session.user.role });
+      }
 
       setDisputes(data.disputes);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Dispute loading error:", error);
 
-      setError(error.message || "Failed to load disputes");
+      setError(
+        error instanceof Error ? error.message : "Failed to load disputes",
+      );
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadDisputes();
+    void Promise.resolve().then(loadDisputes);
   }, []);
 
   // =====================================================
@@ -102,10 +116,12 @@ export default function DisputesPage() {
       });
 
       await loadDisputes();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Investigation error:", error);
 
-      setError(error.message || "Failed to start investigation");
+      setError(
+        error instanceof Error ? error.message : "Failed to start investigation",
+      );
     } finally {
       setActionLoading(null);
     }
@@ -125,10 +141,12 @@ export default function DisputesPage() {
       });
 
       await loadDisputes();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Recovery request error:", error);
 
-      setError(error.message || "Failed to request recovery");
+      setError(
+        error instanceof Error ? error.message : "Failed to request recovery",
+      );
     } finally {
       setActionLoading(null);
     }
@@ -158,10 +176,12 @@ export default function DisputesPage() {
       setResolution("");
 
       await loadDisputes();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Resolve dispute error:", error);
 
-      setError(error.message || "Failed to resolve dispute");
+      setError(
+        error instanceof Error ? error.message : "Failed to resolve dispute",
+      );
     } finally {
       setActionLoading(null);
     }
@@ -224,6 +244,10 @@ export default function DisputesPage() {
     }
   };
 
+  const canManageDisputes = ["admin", "supervisor"].includes(
+    currentUser?.role || "",
+  );
+
   return (
     <main className="min-h-screen bg-gray-100">
       {/* =====================================================
@@ -238,12 +262,12 @@ export default function DisputesPage() {
             <p className="text-sm text-gray-500">Dispute Management</p>
           </div>
 
-          <a
+          <Link
             href="/dashboard"
             className="text-sm text-gray-600 hover:text-gray-900"
           >
             Back to Dashboard
-          </a>
+          </Link>
         </div>
       </header>
 
@@ -436,7 +460,7 @@ export default function DisputesPage() {
                   <div className="mt-6 pt-5 border-t border-gray-100">
                     {/* OPEN */}
 
-                    {dispute.status === "open" && (
+                    {canManageDisputes && dispute.status === "open" && (
                       <button
                         onClick={() => handleInvestigation(dispute._id)}
                         disabled={isLoading}
@@ -453,7 +477,7 @@ export default function DisputesPage() {
 
                     {/* INVESTIGATION */}
 
-                    {dispute.status === "investigation" && (
+                    {canManageDisputes && dispute.status === "investigation" && (
                       <button
                         onClick={() => handleRecovery(dispute._id)}
                         disabled={isLoading}
@@ -470,7 +494,7 @@ export default function DisputesPage() {
 
                     {/* RECOVERY REQUESTED */}
 
-                    {dispute.status === "recovery_requested" && (
+                    {canManageDisputes && dispute.status === "recovery_requested" && (
                       <div className="space-y-3">
                         <textarea
                           value={resolution}
@@ -508,13 +532,13 @@ export default function DisputesPage() {
                   {/* VIEW TRANSACTION */}
 
                   <div className="mt-5 flex justify-end">
-                    <a
+                    <Link
                       href={`/remittance/${dispute.remittance._id}`}
                       className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
                     >
                       View Transaction
                       <ArrowRight className="w-4 h-4" />
-                    </a>
+                    </Link>
                   </div>
                 </div>
               );

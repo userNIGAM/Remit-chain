@@ -10,7 +10,20 @@ const getCsrfToken = (): string | null => {
   return match ? decodeURIComponent(match[1]) : null;
 };
 
-export const api = async <T = any>(
+const getErrorMessage = (data: unknown, status: number): string => {
+  if (
+    data !== null &&
+    typeof data === "object" &&
+    "message" in data &&
+    typeof (data as { message?: unknown }).message === "string"
+  ) {
+    return (data as { message: string }).message;
+  }
+
+  return `Request failed with status ${status}`;
+};
+
+export const api = async <T = unknown>(
   endpoint: string,
   options: RequestInit = {},
 ): Promise<T> => {
@@ -41,7 +54,7 @@ export const api = async <T = any>(
     throw new Error("Network error. Please check your connection.");
   }
 
-  let data: any = null;
+  let data: unknown = null;
   try {
     data = await response.json();
   } catch {
@@ -49,9 +62,7 @@ export const api = async <T = any>(
   }
 
   if (!response.ok) {
-    throw new Error(
-      data?.message || `Request failed with status ${response.status}`,
-    );
+    throw new Error(getErrorMessage(data, response.status));
   }
 
   return data as T;

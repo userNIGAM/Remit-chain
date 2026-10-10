@@ -80,9 +80,11 @@ export default function AuditLogsPage() {
         const data = await api<{ logs: AuditLog[] }>("/audit-logs");
 
         setLogs(data.logs || []);
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("Audit logs error:", error);
-        setError(error.message || "Failed to load audit logs");
+        setError(
+          error instanceof Error ? error.message : "Failed to load audit logs",
+        );
       } finally {
         setLoading(false);
       }

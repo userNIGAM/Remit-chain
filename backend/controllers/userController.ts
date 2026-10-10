@@ -3,6 +3,15 @@ import bcrypt from "bcryptjs";
 
 import User from "../models/User.js";
 import generateRemitId from "../utils/generateRemitId.js";
+import { requireUser } from "../types/auth.js";
+import {
+  isNonEmptyString,
+  isValidEmail,
+  isValidObjectId,
+  normalizePhone,
+} from "../utils/validation.js";
+
+const MIN_PASSWORD_LENGTH = 8;
 
 // =====================================================
 // GET ALL USERS
@@ -36,7 +45,16 @@ export const getUserById = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as { id?: string };
+
+    if (!isValidObjectId(id)) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid user id",
+      });
+
+      return;
+    }
 
     const user = await User.findById(id).select("-password");
 
@@ -85,10 +103,39 @@ export const createStaff = async (
     }
 
     // Required fields
-    if (!name || !email || !phone || !password) {
+    if (!isNonEmptyString(name)) {
       res.status(400).json({
         success: false,
-        message: "Name, email, phone and password are required",
+        message: "Name is required",
+      });
+
+      return;
+    }
+
+    if (!isValidEmail(email)) {
+      res.status(400).json({
+        success: false,
+        message: "Enter a valid email address",
+      });
+
+      return;
+    }
+
+    const normalizedPhone = normalizePhone(phone);
+
+    if (!normalizedPhone) {
+      res.status(400).json({
+        success: false,
+        message: "Enter a valid phone number (7-15 digits)",
+      });
+
+      return;
+    }
+
+    if (!isNonEmptyString(password) || password.length < MIN_PASSWORD_LENGTH) {
+      res.status(400).json({
+        success: false,
+        message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
       });
 
       return;
@@ -96,7 +143,7 @@ export const createStaff = async (
 
     // Check email
     const existingEmail = await User.findOne({
-      email: email.toLowerCase(),
+      email: email.trim().toLowerCase(),
     });
 
     if (existingEmail) {
@@ -110,7 +157,7 @@ export const createStaff = async (
 
     // Check phone
     const existingPhone = await User.findOne({
-      phone,
+      phone: normalizedPhone,
     });
 
     if (existingPhone) {
@@ -134,9 +181,9 @@ export const createStaff = async (
 
     // Create staff user
     const user = await User.create({
-      name,
-      email: email.toLowerCase(),
-      phone,
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      phone: normalizedPhone,
       password: hashedPassword,
 
       role,
@@ -185,7 +232,16 @@ export const verifyUser = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as { id?: string };
+
+    if (!isValidObjectId(id)) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid user id",
+      });
+
+      return;
+    }
 
     const user = await User.findById(id);
 
@@ -243,13 +299,34 @@ export const updateUserStatus = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const { id } = req.params;
-    const { isActive } = req.body;
+    const { userId: actingUserId } = requireUser(req);
+    const { id } = req.params as { id?: string };
+    const { isActive } = req.body as { isActive?: unknown };
 
     if (typeof isActive !== "boolean") {
       res.status(400).json({
         success: false,
         message: "isActive must be true or false",
+      });
+
+      return;
+    }
+
+    if (!isValidObjectId(id)) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid user id",
+      });
+
+      return;
+    }
+
+    // An admin must not be able to lock themselves out. With a single admin
+    // deployment that would leave the system unadministrable.
+    if (id === actingUserId && isActive === false) {
+      res.status(400).json({
+        success: false,
+        message: "You cannot deactivate your own account",
       });
 
       return;

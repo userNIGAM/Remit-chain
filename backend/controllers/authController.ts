@@ -5,6 +5,12 @@ import jwt from "jsonwebtoken";
 
 import User from "../models/User.js";
 import generateRemitId from "../utils/generateRemitId.js";
+import { requireUser } from "../types/auth.js";
+import {
+  isNonEmptyString,
+  isValidEmail,
+  normalizePhone,
+} from "../utils/validation.js";
 
 // =====================================================
 // COOKIE OPTIONS
@@ -203,8 +209,10 @@ export const login = async (
 
     const token = jwt.sign(
       {
+        // Only the identity is signed. Role and account status are read from
+        // the database on every request, so a stale token cannot carry stale
+        // privileges.
         userId: user._id.toString(),
-        role: user.role,
       },
       secret,
       { expiresIn: "7d" },
@@ -248,7 +256,7 @@ export const login = async (
 
 export const getMe = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = (req as any).userId;
+    const { userId } = requireUser(req);
     const user = await User.findById(userId).select("-password");
 
     if (!user) {
@@ -268,6 +276,151 @@ export const getMe = async (req: Request, res: Response): Promise<void> => {
     res.status(500).json({
       success: false,
       message: "Server error",
+    });
+  }
+};
+
+// =====================================================
+// UPDATE MY PROFILE
+// =====================================================
+//
+// Every role maintains its own contact details and a receiver its preferred
+// payout method. Fields that carry authority or trust — role, remitId,
+// verificationStatus and isActive — are deliberately not updatable here, so
+// this route can never be used to escalate privileges.
+// =====================================================
+
+const PAYOUT_METHODS = ["bank", "wallet", "cash"] as const;
+
+export const updateMyProfile = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { userId } = requireUser(req);
+
+    const body = req.body as Record<string, unknown>;
+
+    const update: Record<string, unknown> = {};
+
+    if (body.name !== undefined) {
+      if (!isNonEmptyString(body.name)) {
+        res.status(400).json({ success: false, message: "Name cannot be empty" });
+        return;
+      }
+
+      update.name = body.name.trim();
+    }
+
+    if (body.phone !== undefined) {
+      const phone = normalizePhone(body.phone);
+
+      if (!phone) {
+        res.status(400).json({
+          success: false,
+          message: "Enter a valid phone number (7-15 digits)",
+        });
+        return;
+      }
+
+      const existingPhone = await User.findOne({
+        phone,
+        _id: { $ne: userId },
+      });
+
+      if (existingPhone) {
+        res.status(400).json({
+          success: false,
+          message: "Phone number already registered",
+        });
+        return;
+      }
+
+      update.phone = phone;
+    }
+
+    if (body.email !== undefined) {
+      if (!isValidEmail(body.email)) {
+        res.status(400).json({ success: false, message: "Enter a valid email" });
+        return;
+      }
+
+      const email = body.email.trim().toLowerCase();
+
+      const existingEmail = await User.findOne({
+        email,
+        _id: { $ne: userId },
+      });
+
+      if (existingEmail) {
+        res.status(400).json({
+          success: false,
+          message: "Email already registered",
+        });
+        return;
+      }
+
+      update.email = email;
+    }
+
+    if (body.address !== undefined) {
+      update.address = isNonEmptyString(body.address)
+        ? body.address.trim()
+        : undefined;
+    }
+
+    if (body.country !== undefined) {
+      update.country = isNonEmptyString(body.country)
+        ? body.country.trim()
+        : undefined;
+    }
+
+    if (body.preferredPayoutMethod !== undefined) {
+      if (
+        typeof body.preferredPayoutMethod !== "string" ||
+        !(PAYOUT_METHODS as readonly string[]).includes(
+          body.preferredPayoutMethod,
+        )
+      ) {
+        res.status(400).json({
+          success: false,
+          message: "Invalid payout method. Use bank, wallet or cash",
+        });
+        return;
+      }
+
+      update.preferredPayoutMethod = body.preferredPayoutMethod;
+    }
+
+    if (Object.keys(update).length === 0) {
+      res.status(400).json({
+        success: false,
+        message: "No supported fields were provided",
+      });
+      return;
+    }
+
+    const user = await User.findByIdAndUpdate(userId, update, {
+      new: true,
+      runValidators: true,
+    }).select("-password");
+
+    if (!user) {
+      res.status(404).json({ success: false, message: "User not found" });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      user,
+    });
+  } catch (error) {
+    console.error("Update profile error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Server error while updating profile",
     });
   }
 };

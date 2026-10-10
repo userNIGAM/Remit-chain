@@ -1,5 +1,5 @@
-import RoleDashboard from "@/components/RoleDashboard";
+import ReceiverDashboard from "@/components/dashboards/receiver/ReceiverDashboard";
 
 export default function ReceiverDashboardPage() {
-  return <RoleDashboard roleParam="receiver" />;
+  return <ReceiverDashboard />;
 }

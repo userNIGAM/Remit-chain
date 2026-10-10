@@ -6,7 +6,6 @@ import Link from "next/link";
 import { AnimatePresence, motion, useAnimation } from "framer-motion";
 import {
   AlertCircle,
-  ArrowLeft,
   Banknote,
   CheckCircle2,
   Eye,
@@ -24,6 +23,7 @@ import {
 import toast, { Toaster } from "react-hot-toast";
 
 import { api } from "@/lib/api";
+import { useGuestOnly } from "@/lib/useGuestOnly";
 
 type Role = "sender" | "receiver";
 
@@ -94,6 +94,7 @@ const STRENGTH_META = [
 
 export default function RegisterPage() {
   const router = useRouter();
+  const checkingSession = useGuestOnly();
 
   const [role, setRole] = useState<Role>("sender");
 
@@ -211,7 +212,7 @@ export default function RegisterPage() {
         }),
       };
 
-      const response = await api("/auth/register", {
+      const response = await api<{ user: { remitId: string } }>("/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -227,11 +228,11 @@ export default function RegisterPage() {
       setTimeout(() => {
         router.push("/login");
       }, 2000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       const message =
-        err?.response?.data?.message ||
-        err?.message ||
-        "Registration failed. Please try again.";
+        err instanceof Error
+          ? err.message
+          : "Registration failed. Please try again.";
 
       setError(message);
       shakeCard();
@@ -264,7 +265,7 @@ export default function RegisterPage() {
       />
 
       <div className="w-full max-w-2xl">
-        {booting ? (
+        {booting || checkingSession ? (
           <RegisterSkeleton />
         ) : (
           <motion.div

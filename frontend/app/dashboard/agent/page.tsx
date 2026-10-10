@@ -1,5 +1,5 @@
-import RoleDashboard from "@/components/RoleDashboard";
+import AgentDashboard from "@/components/dashboards/agent/AgentDashboard";
 
 export default function AgentDashboardPage() {
-  return <RoleDashboard roleParam="agent" />;
+  return <AgentDashboard />;
 }

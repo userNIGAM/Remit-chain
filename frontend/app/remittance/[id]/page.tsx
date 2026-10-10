@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, CheckCircle, Loader2, ShieldCheck } from "lucide-react";
 
 import { api } from "@/lib/api";
 import AuditTimeline from "@/components/AuditTimeline";
+import { isUserRole, type UserRole } from "@/lib/roles";
 
 type Remittance = {
   _id: string;
@@ -31,6 +32,7 @@ type Remittance = {
   actualPayout?: number;
   payoutCurrency?: string;
   payoutMethod: string;
+  payoutBank?: string;
   channel: string;
   status: string;
 
@@ -43,6 +45,51 @@ type Remittance = {
   completedAt?: string;
 };
 
+type CurrentUser = {
+  role: UserRole;
+};
+
+type BlockchainResult = {
+  message?: string;
+  blockchain?: {
+    network?: string;
+    signature?: string;
+  } | null;
+};
+
+type VerificationResult = {
+  verified: boolean;
+  message?: string;
+  liveTamperCheck?: { matches: boolean } | null;
+  hashVerification?: {
+    originalHash?: string;
+    recalculatedHash?: string;
+    matches: boolean;
+  } | null;
+  blockchainVerification?: {
+    found?: boolean;
+    finalized?: boolean;
+    slot?: number | null;
+    signature?: string;
+  } | null;
+};
+
+type RemittanceDispute = {
+  _id: string;
+  remittance?: { _id?: string };
+  type?: string;
+  status?: string;
+  expectedAmount?: number;
+  actualAmount?: number;
+  difference?: number;
+  description?: string;
+  resolution?: string;
+};
+
+const getErrorMessage = (error: unknown, fallback: string): string =>
+  error instanceof Error ? error.message : fallback;
+
+
 export default function RemittanceDetailsPage() {
   const params = useParams();
   const router = useRouter();
@@ -50,6 +97,7 @@ export default function RemittanceDetailsPage() {
   const id = params.id as string;
 
   const [remittance, setRemittance] = useState<Remittance | null>(null);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
 
   const [actualPayout, setActualPayout] = useState("");
 
@@ -59,15 +107,17 @@ export default function RemittanceDetailsPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const [blockchainResult, setBlockchainResult] = useState<any>(null);
-  const [verificationResult, setVerificationResult] = useState<any>(null);
+  const [blockchainResult, setBlockchainResult] =
+    useState<BlockchainResult | null>(null);
+  const [verificationResult, setVerificationResult] =
+    useState<VerificationResult | null>(null);
 
-  const [dispute, setDispute] = useState<any>(null);
+  const [dispute, setDispute] = useState<RemittanceDispute | null>(null);
   const [loadingDispute, setLoadingDispute] = useState(false);
   const [disputeActionLoading, setDisputeActionLoading] = useState(false);
   const [resolution, setResolution] = useState("");
 
-  const loadRemittance = async () => {
+  const loadRemittance = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
@@ -75,18 +125,43 @@ export default function RemittanceDetailsPage() {
       const data = await api<{ remittance: Remittance }>(`/remittances/${id}`);
 
       setRemittance(data.remittance || (data as unknown as Remittance));
-    } catch (error: any) {
-      setError(error.message || "Failed to load remittance");
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, "Failed to load remittance"));
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     if (id) {
-      loadRemittance();
+      void Promise.resolve().then(loadRemittance);
     }
-  }, [id]);
+  }, [id, loadRemittance]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadCurrentUser = async () => {
+      try {
+        const data = await api<{ user: { role?: unknown } }>("/auth/me");
+
+        if (!isUserRole(data.user?.role)) {
+          router.replace("/login");
+          return;
+        }
+
+        if (active) setCurrentUser({ role: data.user.role });
+      } catch {
+        router.replace("/login");
+      }
+    };
+
+    void loadCurrentUser();
+
+    return () => {
+      active = false;
+    };
+  }, [router]);
 
   const performAction = async (
     endpoint: string,
@@ -112,9 +187,9 @@ export default function RemittanceDetailsPage() {
 
       setSuccess(successMessage);
       await loadRemittance();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Action error:", err);
-      setError(err.message || "Action failed");
+      setError(getErrorMessage(err, "Action failed"));
     } finally {
       setActionLoading(false);
     }
@@ -164,7 +239,7 @@ export default function RemittanceDetailsPage() {
       setSuccess("");
       setBlockchainResult(null);
 
-      const data = await api(`/remittances/${id}/blockchain`, {
+      const data = await api<BlockchainResult>(`/remittances/${id}/blockchain`, {
         method: "POST",
         body: JSON.stringify({}),
       });
@@ -172,13 +247,12 @@ export default function RemittanceDetailsPage() {
       setBlockchainResult(data);
 
       setSuccess(
-        (data as any).message ||
-          "Remittance successfully committed to blockchain",
+        data.message || "Remittance successfully committed to blockchain",
       );
 
       await loadRemittance();
-    } catch (error: any) {
-      setError(error.message || "Blockchain commit failed");
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, "Blockchain commit failed"));
     } finally {
       setActionLoading(false);
     }
@@ -191,52 +265,53 @@ export default function RemittanceDetailsPage() {
       setSuccess("");
       setVerificationResult(null);
 
-      const data = await api(`/remittances/${id}/verify-blockchain`);
+      const data = await api<VerificationResult>(
+        `/remittances/${id}/verify-blockchain`,
+      );
       console.log("Verification result:", data);
       setVerificationResult(data);
 
-      if ((data as any).verified) {
+      if (data.verified) {
         setSuccess(
-          (data as any).message ||
-            "Remittance blockchain verification successful",
+          data.message || "Remittance blockchain verification successful",
         );
       } else {
-        setError((data as any).message || "Blockchain verification failed");
+        setError(data.message || "Blockchain verification failed");
       }
-    } catch (error: any) {
-      setError(error.message || "Blockchain verification failed");
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, "Blockchain verification failed"));
     } finally {
       setActionLoading(false);
     }
   };
 
-  const fetchDispute = async () => {
+  const fetchDispute = useCallback(async () => {
     if (!remittance) return;
 
     try {
       setLoadingDispute(true);
 
-      const data = await api<{ disputes: any[] }>("/disputes");
+      const data = await api<{ disputes: RemittanceDispute[] }>("/disputes");
 
       const currentDispute = data.disputes?.find(
-        (item: any) =>
+        (item) =>
           item.remittance?._id?.toString() === remittance._id?.toString(),
       );
 
       setDispute(currentDispute || null);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to fetch dispute:", error);
       setDispute(null);
     } finally {
       setLoadingDispute(false);
     }
-  };
+  }, [remittance]);
 
   useEffect(() => {
     if (remittance) {
-      fetchDispute();
+      void Promise.resolve().then(fetchDispute);
     }
-  }, [remittance]);
+  }, [remittance, fetchDispute]);
 
   const startDisputeInvestigation = async () => {
     if (!dispute) return;
@@ -254,9 +329,9 @@ export default function RemittanceDetailsPage() {
 
       await loadRemittance();
       await fetchDispute();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Investigation error:", error);
-      setError(error.message || "Failed to start investigation");
+      setError(getErrorMessage(error, "Failed to start investigation"));
     } finally {
       setDisputeActionLoading(false);
     }
@@ -278,9 +353,9 @@ export default function RemittanceDetailsPage() {
 
       await loadRemittance();
       await fetchDispute();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Recovery error:", error);
-      setError(error.message || "Failed to request recovery");
+      setError(getErrorMessage(error, "Failed to request recovery"));
     } finally {
       setDisputeActionLoading(false);
     }
@@ -312,13 +387,24 @@ export default function RemittanceDetailsPage() {
 
       await loadRemittance();
       await fetchDispute();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Resolve dispute error:", error);
-      setError(error.message || "Failed to resolve dispute");
+      setError(getErrorMessage(error, "Failed to resolve dispute"));
     } finally {
       setDisputeActionLoading(false);
     }
   };
+
+  const canApprove = ["admin", "supervisor"].includes(currentUser?.role || "");
+  const canProcessPayout = ["admin", "supervisor", "agent"].includes(
+    currentUser?.role || "",
+  );
+  const canCommitBlockchain = ["admin", "supervisor"].includes(
+    currentUser?.role || "",
+  );
+  const canManageDispute = ["admin", "supervisor"].includes(
+    currentUser?.role || "",
+  );
 
   if (loading) {
     return (
@@ -453,7 +539,7 @@ export default function RemittanceDetailsPage() {
 
             <InfoItem
               label="Fee"
-              value={`${remittance.fee} ${remittance.sendingCurrency}`}
+              value={`${remittance.fee} NPR`}
             />
 
             <InfoItem
@@ -472,6 +558,10 @@ export default function RemittanceDetailsPage() {
 
             <InfoItem label="Payout Method" value={remittance.payoutMethod} />
 
+            {remittance.payoutBank && (
+              <InfoItem label="Receiving Bank" value={remittance.payoutBank} />
+            )}
+
             <InfoItem label="Channel" value={remittance.channel} />
 
             <InfoItem
@@ -487,7 +577,7 @@ export default function RemittanceDetailsPage() {
           </h2>
 
           <div className="flex flex-wrap gap-3 mt-5">
-            {remittance.status === "created" && (
+            {canApprove && remittance.status === "created" && (
               <ActionButton
                 onClick={approveRemittance}
                 disabled={actionLoading}
@@ -496,7 +586,7 @@ export default function RemittanceDetailsPage() {
               </ActionButton>
             )}
 
-            {remittance.status === "approved" && (
+            {canProcessPayout && remittance.status === "approved" && (
               <ActionButton
                 onClick={processRemittance}
                 disabled={actionLoading}
@@ -505,13 +595,13 @@ export default function RemittanceDetailsPage() {
               </ActionButton>
             )}
 
-            {remittance.status === "processing" && (
+            {canProcessPayout && remittance.status === "processing" && (
               <ActionButton onClick={readyForPayout} disabled={actionLoading}>
                 Ready for Payout
               </ActionButton>
             )}
 
-            {remittance.status === "ready_for_payout" && (
+            {canProcessPayout && remittance.status === "ready_for_payout" && (
               <div className="rounded-xl border border-gray-200 bg-white p-5">
                 <h3 className="text-lg font-semibold text-gray-900">
                   Complete Payout
@@ -549,7 +639,7 @@ export default function RemittanceDetailsPage() {
               </div>
             )}
 
-            {remittance.status === "completed" && (
+            {canCommitBlockchain && remittance.status === "completed" && (
               <ActionButton onClick={commitBlockchain} disabled={actionLoading}>
                 <ShieldCheck className="w-4 h-4" />
                 Commit to Blockchain
@@ -960,7 +1050,7 @@ export default function RemittanceDetailsPage() {
                   </div>
                 )}
 
-                {dispute.status === "open" && (
+                {canManageDispute && dispute.status === "open" && (
                   <div className="mt-6">
                     <button
                       type="button"
@@ -975,7 +1065,7 @@ export default function RemittanceDetailsPage() {
                   </div>
                 )}
 
-                {dispute.status === "investigation" && (
+                {canManageDispute && dispute.status === "investigation" && (
                   <div className="mt-6">
                     <button
                       type="button"
@@ -990,7 +1080,7 @@ export default function RemittanceDetailsPage() {
                   </div>
                 )}
 
-                {dispute.status === "recovery_requested" && (
+                {canManageDispute && dispute.status === "recovery_requested" && (
                   <div className="mt-6">
                     <label className="mb-2 block text-sm font-medium text-gray-700">
                       Resolution

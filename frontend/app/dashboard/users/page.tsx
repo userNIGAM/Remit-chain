@@ -74,15 +74,15 @@ export default function UsersPage() {
         id: meResponse.user._id || meResponse.user.id || "",
         role: meResponse.user.role,
       });
-    } catch (err: any) {
-      setError(err?.message || "Failed to load users");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load users");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadUsers();
+    void Promise.resolve().then(loadUsers);
   }, []);
 
   const handleVerify = async (userId: string) => {
@@ -93,8 +93,8 @@ export default function UsersPage() {
       await api(`/users/${userId}/verify`);
 
       await loadUsers();
-    } catch (err: any) {
-      setError(err?.message || "Failed to verify user");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to verify user");
     } finally {
       setActionLoading(null);
     }
@@ -111,8 +111,8 @@ export default function UsersPage() {
       });
 
       await loadUsers();
-    } catch (err: any) {
-      setError(err?.message || "Failed to update user status");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to update user status");
     } finally {
       setActionLoading(null);
     }
@@ -142,8 +142,8 @@ export default function UsersPage() {
 
       setShowCreateStaff(false);
       await loadUsers();
-    } catch (err: any) {
-      setError(err?.message || "Failed to create staff account");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to create staff account");
     } finally {
       setActionLoading(null);
     }
@@ -463,7 +463,7 @@ export default function UsersPage() {
                                 </button>
                               )}
 
-                              {user._id !== currentUser?.id && (
+                              {isAdmin && user._id !== currentUser?.id && (
                                 <button
                                   onClick={() =>
                                     handleStatusChange(user._id, !user.isActive)
@@ -521,7 +521,7 @@ export default function UsersPage() {
                       </div>
                     </div>
 
-                    {user._id !== currentUser?.id && (
+                    {isAdmin && user._id !== currentUser?.id && (
                       <div className="mt-4 flex flex-wrap gap-2">
                         {user.verificationStatus !== "verified" && (
                           <button

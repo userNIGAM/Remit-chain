@@ -4,20 +4,22 @@ import { useEffect, useState } from "react";
 import {
   ArrowRight,
   FileText,
-  Send,
   ShieldCheck,
   Wallet,
   AlertTriangle,
   ScrollText,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { api } from "@/lib/api";
+import RoleNavbar from "@/components/navigation/RoleNavbar";
+import { getRoleHomeRoute, isUserRole, type UserRole } from "@/lib/roles";
 
 interface User {
   name: string;
   email: string;
-  role: string;
+  role: UserRole;
   remitId: string;
 }
 
@@ -31,6 +33,7 @@ type DashboardStats = {
 };
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [loadingStats, setLoadingStats] = useState(true);
 
   const [stats, setStats] = useState<DashboardStats>({
@@ -45,62 +48,53 @@ export default function DashboardPage() {
   const [statsError, setStatsError] = useState("");
   const [user, setUser] = useState<User | null>(null);
 
-  const loadDashboardStats = async () => {
-    try {
-      setLoadingStats(true);
-      setStatsError("");
-
-      const data = await api("/remittances/stats");
-
-      setStats(data.stats);
-    } catch (error: any) {
-      setStatsError(error.message || "Failed to load dashboard statistics");
-    } finally {
-      setLoadingStats(false);
-    }
-  };
-
-  const loadUser = async () => {
-    try {
-      const data = await api("/auth/me");
-
-      console.log("Logged in user:", data);
-
-      setUser(data.user);
-    } catch (error: any) {
-      console.error("User loading error:", error);
-    }
-  };
-
   useEffect(() => {
-    loadDashboardStats();
-    loadUser();
-  }, []);
+    const loadDashboardStats = async () => {
+      try {
+        setStatsError("");
+
+        const data = await api<{ stats: DashboardStats }>("/remittances/stats");
+
+        setStats(data.stats);
+      } catch (error: unknown) {
+        setStatsError(
+          error instanceof Error
+            ? error.message
+            : "Failed to load dashboard statistics",
+        );
+      } finally {
+        setLoadingStats(false);
+      }
+    };
+
+    const loadUser = async () => {
+      try {
+        const data = await api<{ user: User }>("/auth/me");
+
+        if (!isUserRole(data.user?.role)) {
+          router.replace("/login");
+          return;
+        }
+
+        if (data.user.role !== "admin") {
+          router.replace(getRoleHomeRoute(data.user.role) || "/login");
+          return;
+        }
+
+        setUser(data.user);
+        await loadDashboardStats();
+      } catch {
+        router.replace("/login");
+      }
+    };
+
+    void loadUser();
+  }, [router]);
 
   return (
     <main className="min-h-screen bg-gray-100">
       {/* HEADER */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">RemitChain</h1>
-
-            <p className="text-sm text-gray-500">
-              Remittance Management System
-            </p>
-          </div>
-
-          <div className="text-right">
-            <p className="font-medium text-gray-900">
-              {user?.name || "Loading..."}
-            </p>
-
-            <p className="text-sm text-gray-500 capitalize">
-              {user?.role || ""}
-            </p>
-          </div>
-        </div>
-      </header>
+      {user ? <RoleNavbar user={user} /> : null}
 
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* PAGE TITLE */}
@@ -171,16 +165,7 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-            {/* SEND REMITTANCE */}
-            <DashboardAction
-              href="/remittance/create"
-              title="Send Remittance"
-              description="Create a new remittance transaction."
-              icon={<Send className="w-6 h-6" />}
-              primary
-            />
-
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {/* TRANSACTIONS */}
             <DashboardAction
               href="/remittance"

@@ -99,7 +99,25 @@ export const anchorTransactionHash = async (transactionHash: string) => {
   }
 };
 
-export const verifyBlockchainTransaction = async (signature: string) => {
+/**
+ * Consistent result shape for every outcome.
+ *
+ * The previous version returned two different object literals, so the
+ * `slot` field only existed on one branch and callers could not read it
+ * without a narrowing check. `error` is a string (or null) rather than the
+ * raw RPC error object, which was not JSON-serialisable.
+ */
+export type BlockchainStatus = {
+  found: boolean;
+  confirmed: boolean;
+  finalized: boolean;
+  error: string | null;
+  slot: number | null;
+};
+
+export const verifyBlockchainTransaction = async (
+  signature: string,
+): Promise<BlockchainStatus> => {
   try {
     const status = await connection.getSignatureStatus(signature, {
       searchTransactionHistory: true,
@@ -111,8 +129,11 @@ export const verifyBlockchainTransaction = async (signature: string) => {
         confirmed: false,
         finalized: false,
         error: null,
+        slot: null,
       };
     }
+
+    const failed = status.value.err != null;
 
     return {
       found: true,
@@ -120,8 +141,10 @@ export const verifyBlockchainTransaction = async (signature: string) => {
         status.value.confirmationStatus === "confirmed" ||
         status.value.confirmationStatus === "finalized",
       finalized: status.value.confirmationStatus === "finalized",
-      error: status.value.err,
-      slot: status.value.slot,
+      error: failed
+        ? `Transaction failed on chain: ${JSON.stringify(status.value.err)}`
+        : null,
+      slot: status.value.slot ?? null,
     };
   } catch (error) {
     console.error("Blockchain verification error:", error);

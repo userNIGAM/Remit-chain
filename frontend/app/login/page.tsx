@@ -16,6 +16,7 @@ import {
 import toast, { Toaster } from "react-hot-toast";
 import { api } from "@/lib/api";
 import { getRoleHomeRoute } from "@/lib/roles";
+import { useGuestOnly } from "@/lib/useGuestOnly";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -39,6 +40,7 @@ type LoginResponse = {
 
 export default function LoginPage() {
   const router = useRouter();
+  const checkingSession = useGuestOnly();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -150,7 +152,7 @@ export default function LoginPage() {
       />
 
       <div className="w-full max-w-md">
-        {booting ? (
+        {booting || checkingSession ? (
           <LoginSkeleton />
         ) : (
           <motion.div

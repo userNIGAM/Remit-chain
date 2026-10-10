@@ -18,6 +18,7 @@ export interface IRemittance extends Document {
   payoutCurrency: string;
   actualPayout?: number;
   payoutMethod: "bank" | "wallet" | "cash";
+  payoutBank?: string;
 
   status:
     | "created"
@@ -130,6 +131,17 @@ const remittanceSchema = new Schema<IRemittance>(
       type: String,
       enum: ["bank", "wallet", "cash"],
       required: true,
+    },
+
+    payoutBank: {
+      type: String,
+      enum: [
+        "Nabil Bank",
+        "Global IME Bank",
+        "NIC Asia Bank",
+        "Agricultural Development Bank",
+      ],
+      trim: true,
     },
 
     status: {
