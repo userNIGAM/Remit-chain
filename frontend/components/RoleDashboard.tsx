@@ -15,7 +15,6 @@ import {
 
 import { api } from "@/lib/api";
 import { getRoleHomeRoute, isUserRole, type UserRole } from "@/lib/roles";
-import RoleNavbar from "@/components/navigation/RoleNavbar";
 
 type RoleDashboardProps = {
   roleParam: string;
@@ -140,8 +139,6 @@ export default function RoleDashboard({ roleParam }: RoleDashboardProps) {
 
   return (
     <main className="min-h-screen bg-gray-50">
-      <RoleNavbar user={user} />
-
       <div className="mx-auto max-w-6xl px-6 py-10">
         <section className="border-b border-gray-200 pb-8">
           <p className="text-sm font-medium capitalize text-green-700">

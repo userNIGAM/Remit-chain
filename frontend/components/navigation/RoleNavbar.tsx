@@ -74,7 +74,7 @@ export default function RoleNavbar({ user }: { user: NavbarUser }) {
   };
 
   return (
-    <header className="border-b border-gray-200 bg-white">
+    <header className="sticky top-0 z-40 border-b border-gray-200 bg-white">
       <div className="mx-auto max-w-6xl px-6">
         <div className="flex min-h-16 items-center justify-between gap-4">
           <Link href={home} className="flex items-center gap-2 text-lg font-bold text-gray-900">

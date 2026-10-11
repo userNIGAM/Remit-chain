@@ -13,7 +13,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { api } from "@/lib/api";
-import RoleNavbar from "@/components/navigation/RoleNavbar";
 import { getRoleHomeRoute, isUserRole, type UserRole } from "@/lib/roles";
 
 interface User {
@@ -93,9 +92,6 @@ export default function DashboardPage() {
 
   return (
     <main className="min-h-screen bg-gray-100">
-      {/* HEADER */}
-      {user ? <RoleNavbar user={user} /> : null}
-
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* PAGE TITLE */}
         <div className="mb-8">

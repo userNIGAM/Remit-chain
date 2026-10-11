@@ -1,9 +1,14 @@
 import "./globals.css";
 
+import AppNavbar from "@/components/navigation/AppNavbar";
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AppNavbar />
+        {children}
+      </body>
     </html>
   );
 }
