@@ -1,4 +1,13 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+const RAW_API_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+
+// Tolerate a base URL that is missing the trailing "/api" (an easy deployment
+// mistake) so requests always hit the API mount point instead of 404/403ing on
+// the bare host.
+const trimmedBaseUrl = RAW_API_URL.replace(/\/+$/, "");
+const API_URL = trimmedBaseUrl.endsWith("/api")
+  ? trimmedBaseUrl
+  : `${trimmedBaseUrl}/api`;
 
 const SAFE_METHODS = ["GET", "HEAD", "OPTIONS"];
 
