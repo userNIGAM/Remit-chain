@@ -14,7 +14,7 @@ import {
   Mail,
 } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
-import { api } from "@/lib/api";
+import { api, setCsrfToken } from "@/lib/api";
 import { getRoleHomeRoute } from "@/lib/roles";
 import { useGuestOnly } from "@/lib/useGuestOnly";
 
@@ -36,6 +36,7 @@ type LoginResponse = {
   user?: {
     role?: unknown;
   };
+  csrfToken?: unknown;
 };
 
 export default function LoginPage() {
@@ -109,6 +110,8 @@ export default function LoginPage() {
           password,
         }),
       })) as LoginResponse;
+
+      setCsrfToken(typeof data.csrfToken === "string" ? data.csrfToken : null);
 
       const roleHome = getRoleHomeRoute(data.user?.role);
 

@@ -2,12 +2,40 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 const SAFE_METHODS = ["GET", "HEAD", "OPTIONS"];
 
-const getCsrfToken = (): string | null => {
-  if (typeof document === "undefined") return null;
+// The CSRF token is returned in the login response body so the client can use
+// it even when the API is on a different origin (e.g. Vercel frontend + Render
+// backend), where document.cookie cannot read the API's own cookie. The cookie
+// is still consulted as a fallback for same-origin setups.
+const CSRF_STORAGE_KEY = "csrfToken";
 
-  const match = document.cookie.match(/(?:^|;\s*)csrfToken=([^;]+)/);
+let csrfTokenMemory: string | null = null;
 
-  return match ? decodeURIComponent(match[1]) : null;
+const readCsrfToken = (): string | null => {
+  if (csrfTokenMemory) return csrfTokenMemory;
+
+  if (typeof window !== "undefined") {
+    const stored = window.localStorage.getItem(CSRF_STORAGE_KEY);
+    if (stored) return stored;
+  }
+
+  if (typeof document !== "undefined") {
+    const match = document.cookie.match(/(?:^|;\s*)csrfToken=([^;]+)/);
+    if (match) return decodeURIComponent(match[1]);
+  }
+
+  return null;
+};
+
+export const setCsrfToken = (token: string | null): void => {
+  csrfTokenMemory = token;
+
+  if (typeof window === "undefined") return;
+
+  if (token) {
+    window.localStorage.setItem(CSRF_STORAGE_KEY, token);
+  } else {
+    window.localStorage.removeItem(CSRF_STORAGE_KEY);
+  }
 };
 
 const getErrorMessage = (data: unknown, status: number): string => {
@@ -35,7 +63,7 @@ export const api = async <T = unknown>(
   };
 
   if (!SAFE_METHODS.includes(method)) {
-    const csrfToken = getCsrfToken();
+    const csrfToken = readCsrfToken();
     if (csrfToken) {
       headers["X-CSRF-Token"] = csrfToken;
     }

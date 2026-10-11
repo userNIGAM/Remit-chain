@@ -18,11 +18,21 @@ dotenv.config();
 // Fail fast if the frontend URL is missing.
 // Without this, `cors` reflects the request Origin and
 // any site can send credentialed requests.
-if (!process.env.FRONTEND_URL) {
+const configuredFrontendUrls = (process.env.FRONTEND_URL || "")
+  .split(",")
+  .map((url) => url.trim())
+  .filter(Boolean);
+
+if (configuredFrontendUrls.length === 0) {
   throw new Error(
     "FRONTEND_URL is not set. Refusing to start with an open CORS policy.",
   );
 }
+
+const allowedFrontendOrigins = new Set([
+  ...configuredFrontendUrls,
+  "https://remit-chain-eta.vercel.app",
+]);
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -47,7 +57,9 @@ app.use(helmet());
 
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL,
+    origin: (origin, callback) => {
+      callback(null, Boolean(origin && allowedFrontendOrigins.has(origin)));
+    },
     credentials: true,
     allowedHeaders: ["Content-Type", "X-CSRF-Token"],
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],

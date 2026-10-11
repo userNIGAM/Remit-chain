@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { LogOut, Menu, Wallet } from "lucide-react";
 import { useState } from "react";
 
-import { api } from "@/lib/api";
+import { api, setCsrfToken } from "@/lib/api";
 import { getRoleHomeRoute, type UserRole } from "@/lib/roles";
 
 type NavbarUser = {
@@ -63,6 +63,7 @@ export default function RoleNavbar({ user }: { user: NavbarUser }) {
       setLoggingOut(true);
       setLogoutError("");
       await api("/auth/logout", { method: "POST", body: JSON.stringify({}) });
+      setCsrfToken(null);
       router.replace("/login");
       router.refresh();
     } catch (error: unknown) {

@@ -29,3 +29,6 @@ logs/
 Thumbs.db
 .idea/
 .vscode/
+
+# Graphify knowledge graph (generated)
+graphify-out/

@@ -221,7 +221,12 @@ export const login = async (
     // JWT inside HTTP-only cookie
     res.cookie("token", token, TOKEN_COOKIE_OPTIONS);
 
-    // CSRF token (readable by the frontend)
+    // CSRF token.
+    // It is set as a readable cookie for same-origin deployments, and also
+    // returned in the body because when the API sits on a different domain
+    // (e.g. Vercel frontend + Render backend) JavaScript cannot read the
+    // cookie with document.cookie. The client stores the body value and echoes
+    // it back in the X-CSRF-Token header.
     const csrfToken = crypto.randomBytes(32).toString("hex");
     res.cookie("csrfToken", csrfToken, CSRF_COOKIE_OPTIONS);
 
@@ -240,6 +245,7 @@ export const login = async (
       success: true,
       message: "Login successful",
       user: userResponse,
+      csrfToken,
     });
   } catch (error) {
     console.error("Login error:", error);
