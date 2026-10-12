@@ -33,6 +33,9 @@ type Remittance = {
   payoutCurrency?: string;
   payoutMethod: string;
   payoutBank?: string;
+  receiverAccountNumber?: string;
+  receiverConfirmed?: boolean;
+  receiverConfirmedAt?: string;
   channel: string;
   status: string;
 
@@ -100,6 +103,7 @@ export default function RemittanceDetailsPage() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
 
   const [actualPayout, setActualPayout] = useState("");
+  const [receiverAccountInput, setReceiverAccountInput] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -229,6 +233,24 @@ export default function RemittanceDetailsPage() {
       {
         actualPayout: payout,
       },
+    );
+  };
+
+  const confirmReceipt = async () => {
+    if (!remittance) return;
+
+    if (remittance.payoutMethod !== "cash" && !receiverAccountInput.trim()) {
+      setError("Enter the account number where you want to receive the money");
+      return;
+    }
+
+    await performAction(
+      `/remittances/${id}/confirm-receipt`,
+      "PATCH",
+      "Receipt confirmed. Your payout will be released shortly.",
+      remittance.payoutMethod !== "cash"
+        ? { accountNumber: receiverAccountInput.trim() }
+        : {},
     );
   };
 
@@ -562,6 +584,13 @@ export default function RemittanceDetailsPage() {
               <InfoItem label="Receiving Bank" value={remittance.payoutBank} />
             )}
 
+            {remittance.receiverAccountNumber && (
+              <InfoItem
+                label="Receiver Account"
+                value={remittance.receiverAccountNumber}
+              />
+            )}
+
             <InfoItem label="Channel" value={remittance.channel} />
 
             <InfoItem
@@ -601,6 +630,86 @@ export default function RemittanceDetailsPage() {
               </ActionButton>
             )}
 
+            {currentUser?.role === "receiver" &&
+              remittance.status === "ready_for_payout" && (
+                <div className="w-full rounded-xl border border-emerald-200 bg-emerald-50/60 p-5">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Receive Money
+                  </h3>
+
+                  {remittance.receiverConfirmed ? (
+                    <div className="mt-3 flex items-center gap-2 text-sm text-green-800">
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                      You confirmed receipt
+                      {remittance.receiverConfirmedAt
+                        ? ` on ${new Date(remittance.receiverConfirmedAt).toLocaleString()}`
+                        : ""}
+                      . Waiting for the payout to be released.
+                    </div>
+                  ) : (
+                    <>
+                      <p className="mt-2 text-sm text-gray-600">
+                        Confirm your details to receive{" "}
+                        <span className="font-semibold text-gray-900">
+                          {remittance.expectedPayout}{" "}
+                          {remittance.payoutCurrency || "NPR"}
+                        </span>{" "}
+                        by {remittance.payoutMethod}.
+                      </p>
+
+                      {remittance.payoutMethod === "cash" ? (
+                        <p className="mt-3 text-sm text-gray-600">
+                          Bring a valid ID to collect your cash at the branch,
+                          then confirm below.
+                        </p>
+                      ) : (
+                        <div className="mt-4">
+                          <label className="mb-2 block text-sm font-medium text-gray-700">
+                            {remittance.payoutMethod === "bank"
+                              ? "Bank Account Number"
+                              : "Wallet Number"}
+                          </label>
+
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={receiverAccountInput}
+                            onChange={(e) =>
+                              setReceiverAccountInput(e.target.value)
+                            }
+                            placeholder={
+                              remittance.payoutMethod === "bank"
+                                ? remittance.receiverAccountNumber ||
+                                  "Enter your account number"
+                                : "Enter your wallet number"
+                            }
+                            className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-900 outline-none focus:border-emerald-500"
+                          />
+
+                          {remittance.payoutMethod === "bank" &&
+                            remittance.receiverAccountNumber && (
+                              <p className="mt-2 text-xs text-gray-500">
+                                The sender entered{" "}
+                                {remittance.receiverAccountNumber}. Re-enter it
+                                to confirm.
+                              </p>
+                            )}
+                        </div>
+                      )}
+
+                      <div className="mt-4">
+                        <ActionButton
+                          onClick={confirmReceipt}
+                          disabled={actionLoading}
+                        >
+                          {actionLoading ? "Confirming..." : "Confirm Receipt"}
+                        </ActionButton>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
             {canProcessPayout && remittance.status === "ready_for_payout" && (
               <div className="rounded-xl border border-gray-200 bg-white p-5">
                 <h3 className="text-lg font-semibold text-gray-900">
@@ -613,6 +722,21 @@ export default function RemittanceDetailsPage() {
                     {remittance.expectedPayout} {remittance.payoutCurrency}
                   </span>
                 </p>
+
+                {remittance.receiverConfirmed ? (
+                  <p className="mt-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+                    Receiver confirmed receipt
+                    {remittance.receiverConfirmedAt
+                      ? ` on ${new Date(remittance.receiverConfirmedAt).toLocaleString()}`
+                      : ""}
+                    .
+                  </p>
+                ) : (
+                  <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    Waiting for the receiver to confirm receipt before the payout
+                    can be completed.
+                  </p>
+                )}
 
                 <div className="mt-4">
                   <label className="mb-2 block text-sm font-medium text-gray-700">
@@ -631,7 +755,11 @@ export default function RemittanceDetailsPage() {
                 <div className="mt-4">
                   <ActionButton
                     onClick={() => completePayout(Number(actualPayout))}
-                    disabled={!actualPayout || actionLoading}
+                    disabled={
+                      !remittance.receiverConfirmed ||
+                      !actualPayout ||
+                      actionLoading
+                    }
                   >
                     {actionLoading ? "Processing..." : "Complete Payout"}
                   </ActionButton>

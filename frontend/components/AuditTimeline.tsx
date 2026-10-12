@@ -59,6 +59,12 @@ const ACTION_PRESENTATION: Record<
     iconClass: "bg-violet-100 text-violet-700",
     statusClass: "bg-violet-50 text-violet-700",
   },
+  receiver_confirmed: {
+    label: "Receiver confirmed receipt",
+    icon: CheckCircle2,
+    iconClass: "bg-emerald-100 text-emerald-700",
+    statusClass: "bg-emerald-50 text-emerald-700",
+  },
   payout_completed: {
     label: "Payout completed",
     icon: CheckCircle2,

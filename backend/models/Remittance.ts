@@ -20,6 +20,15 @@ export interface IRemittance extends Document {
   payoutMethod: "bank" | "wallet" | "cash";
   payoutBank?: string;
 
+  // Destination account. For a bank payout the sender must enter the receiver's
+  // account number; the receiver then confirms it (and, for a wallet, supplies
+  // their mobile number) before staff can release the money.
+  receiverAccountNumber?: string;
+
+  // Set when the receiver fills the "receive money" form.
+  receiverConfirmed: boolean;
+  receiverConfirmedAt?: Date;
+
   status:
     | "created"
     | "verified"
@@ -142,6 +151,20 @@ const remittanceSchema = new Schema<IRemittance>(
         "Agricultural Development Bank",
       ],
       trim: true,
+    },
+
+    receiverAccountNumber: {
+      type: String,
+      trim: true,
+    },
+
+    receiverConfirmed: {
+      type: Boolean,
+      default: false,
+    },
+
+    receiverConfirmedAt: {
+      type: Date,
     },
 
     status: {

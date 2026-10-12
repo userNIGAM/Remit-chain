@@ -13,6 +13,7 @@ export interface IAuditLog extends Document {
     | "rejected"
     | "processing"
     | "ready_for_payout"
+    | "receiver_confirmed"
     | "payout_completed"
     | "cancelled"
     | "error_reported"
@@ -62,6 +63,7 @@ const auditLogSchema = new Schema<IAuditLog>(
         "rejected",
         "processing",
         "ready_for_payout",
+        "receiver_confirmed",
         "payout_completed",
         "cancelled",
         "error_reported",

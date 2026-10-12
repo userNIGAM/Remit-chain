@@ -48,6 +48,13 @@ const fail = (
   res.status(status).json({ success: false, message, ...extra });
 };
 
+// Fixed, system-wide pricing. A sender does not set their own exchange rate or
+// fee (they would be charging themselves), and neither can staff or an admin:
+// these are platform constants that are shown to the user, not per-transaction
+// inputs. Any exchangeRate/fee value in a request body is ignored.
+const EXCHANGE_RATE = 36.5;
+const TRANSFER_FEE = 25;
+
 /**
  * Writes one audit entry. The actor's IP is recorded so the trail identifies
  * who acted and from where.
@@ -61,6 +68,7 @@ const recordAudit = async (entry: {
     | "approved"
     | "processing"
     | "ready_for_payout"
+    | "receiver_confirmed"
     | "payout_completed"
     | "error_reported"
     | "investigation_started"
@@ -414,46 +422,30 @@ export const createRemittance = async (
       receiverRemitId,
       amount: rawAmount,
       sendingCurrency: rawCurrency,
-      exchangeRate: rawRate,
-      fee: rawFee,
       payoutMethod,
       payoutBank: rawPayoutBank,
+      receiverAccountNumber: rawReceiverAccountNumber,
     } = body;
+
+    // ---- Pricing ------------------------------------------------------
+    // Exchange rate and transfer fee are platform constants (see above). They
+    // are displayed to the sender but never submitted, so any values supplied
+    // in the request body are ignored entirely.
+    const exchangeRate = EXCHANGE_RATE;
+    const fee = TRANSFER_FEE;
 
     // ---- Numeric validation -------------------------------------------
     // Coerce first, then range-check. The previous code compared raw values,
     // so a non-numeric body slipped through and produced NaN payouts.
     const amount = toFiniteNumber(rawAmount);
-    const exchangeRate = toFiniteNumber(rawRate);
-    const fee = rawFee === undefined ? 0 : toFiniteNumber(rawFee);
 
     if (amount === null) {
       fail(res, 400, "Amount must be a number");
       return;
     }
 
-    if (exchangeRate === null) {
-      fail(res, 400, "Exchange rate must be a number");
-      return;
-    }
-
-    if (fee === null) {
-      fail(res, 400, "Fee must be a number");
-      return;
-    }
-
     if (amount <= 0) {
       fail(res, 400, "Amount must be greater than zero");
-      return;
-    }
-
-    if (exchangeRate <= 0) {
-      fail(res, 400, "Exchange rate must be greater than zero");
-      return;
-    }
-
-    if (fee < 0) {
-      fail(res, 400, "Fee cannot be negative");
       return;
     }
 
@@ -480,6 +472,19 @@ export const createRemittance = async (
 
     if (payoutMethod === "bank" && !payoutBank) {
       fail(res, 400, "Choose a valid receiving bank");
+      return;
+    }
+
+    // A bank payout must name the destination account up front. A wallet payout
+    // is identified by the receiver's mobile number, which the receiver enters
+    // on their "receive money" form, so the sender does not supply one.
+    const receiverAccountNumber =
+      payoutMethod === "bank" && isNonEmptyString(rawReceiverAccountNumber)
+        ? rawReceiverAccountNumber.trim()
+        : undefined;
+
+    if (payoutMethod === "bank" && !receiverAccountNumber) {
+      fail(res, 400, "Receiver account number is required for bank payouts");
       return;
     }
 
@@ -584,6 +589,7 @@ export const createRemittance = async (
       payoutCurrency: "NPR",
       payoutMethod,
       ...(payoutBank ? { payoutBank } : {}),
+      ...(receiverAccountNumber ? { receiverAccountNumber } : {}),
       status: "created",
     });
 
@@ -616,6 +622,9 @@ export const createRemittance = async (
         payoutCurrency: remittance.payoutCurrency,
         payoutMethod: remittance.payoutMethod,
         ...(remittance.payoutBank ? { payoutBank: remittance.payoutBank } : {}),
+        ...(remittance.receiverAccountNumber
+          ? { receiverAccountNumber: remittance.receiverAccountNumber }
+          : {}),
         channel: remittance.channel,
         status: remittance.status,
         createdAt: remittance.createdAt,
@@ -874,6 +883,121 @@ export const readyForPayout = async (
 };
 
 // =====================================================
+// RECEIVER CONFIRMS RECEIPT
+// =====================================================
+//
+// The receiver fills a short form to acknowledge the incoming transfer and
+// supply/confirm the account it should land in. Only once this is done may
+// staff complete the payout, so the funds cannot be released without the
+// receiver's participation.
+// =====================================================
+
+export const confirmReceipt = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { userId, userRole } = requireUser(req);
+    const { id } = req.params as { id?: string };
+
+    if (!isValidObjectId(id)) {
+      fail(res, 400, "Invalid remittance id");
+      return;
+    }
+
+    const remittance = await Remittance.findById(id);
+
+    if (!remittance) {
+      fail(res, 404, "Remittance not found");
+      return;
+    }
+
+    // Only the named receiver on this transaction may confirm it. The route is
+    // already receiver-only, but a receiver must not be able to confirm someone
+    // else's transfer.
+    if (userRole !== "receiver" || idOf(remittance.receiver) !== userId) {
+      fail(res, 403, "Only the receiver of this transfer can confirm receipt");
+      return;
+    }
+
+    if (remittance.status !== "ready_for_payout") {
+      fail(
+        res,
+        400,
+        `Receipt can only be confirmed when the transfer is ready for payout (current status: ${remittance.status})`,
+      );
+      return;
+    }
+
+    if (remittance.receiverConfirmed) {
+      res.status(200).json({
+        success: true,
+        message: "Receipt already confirmed",
+        remittance: {
+          id: remittance._id,
+          status: remittance.status,
+          receiverConfirmed: true,
+          receiverConfirmedAt: remittance.receiverConfirmedAt,
+        },
+      });
+      return;
+    }
+
+    // A bank or wallet payout needs a destination number. For a bank payout the
+    // sender already supplied it; the receiver re-enters it to confirm. A cash
+    // pickup has no number to collect.
+    const { accountNumber: rawAccountNumber } = req.body as {
+      accountNumber?: unknown;
+    };
+
+    const accountNumber =
+      remittance.payoutMethod === "cash"
+        ? remittance.receiverAccountNumber
+        : isNonEmptyString(rawAccountNumber)
+          ? rawAccountNumber.trim()
+          : undefined;
+
+    if (remittance.payoutMethod !== "cash" && !accountNumber) {
+      fail(res, 400, "Account number is required to confirm receipt");
+      return;
+    }
+
+    if (accountNumber !== undefined) {
+      remittance.receiverAccountNumber = accountNumber;
+    }
+
+    remittance.receiverConfirmed = true;
+    remittance.receiverConfirmedAt = new Date();
+    await remittance.save();
+
+    await recordAudit({
+      req,
+      actorId: userId,
+      remittance: remittance._id,
+      action: "receiver_confirmed",
+      description: `Receiver confirmed receipt via ${remittance.payoutMethod}`,
+      newStatus: remittance.status,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Receipt confirmed",
+      remittance: {
+        id: remittance._id,
+        transactionId: remittance.transactionId,
+        status: remittance.status,
+        receiverConfirmed: remittance.receiverConfirmed,
+        receiverConfirmedAt: remittance.receiverConfirmedAt,
+      },
+    });
+  } catch (error) {
+    console.error("Confirm receipt error:", error);
+
+    fail(res, 500, "Failed to confirm receipt");
+  }
+};
+
+// =====================================================
 // COMPLETE PAYOUT
 // =====================================================
 
@@ -912,6 +1036,17 @@ export const completePayout = async (
         res,
         400,
         `Cannot complete payout with status: ${remittance.status}`,
+      );
+      return;
+    }
+
+    // The receiver must have confirmed receipt first. This is what stops money
+    // being released to an account nobody has acknowledged.
+    if (!remittance.receiverConfirmed) {
+      fail(
+        res,
+        400,
+        "The receiver has not confirmed receipt yet. Ask them to complete the receive form.",
       );
       return;
     }

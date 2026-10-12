@@ -36,6 +36,7 @@ type Remittance = {
   payoutCurrency?: string;
   payoutMethod: string;
   payoutBank?: string;
+  receiverConfirmed?: boolean;
   channel: string;
   status: string;
   transactionHash?: string;
@@ -309,6 +310,13 @@ export default function RemittancesPage() {
                         >
                           {formatStatus(remittance.status)}
                         </span>
+
+                        {remittance.status === "ready_for_payout" &&
+                          !remittance.receiverConfirmed && (
+                            <p className="mt-1 text-xs font-medium text-amber-600">
+                              Awaiting receiver confirmation
+                            </p>
+                          )}
                       </td>
 
                       <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">

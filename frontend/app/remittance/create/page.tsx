@@ -27,6 +27,11 @@ const DEMO_BANKS = [
   "Agricultural Development Bank",
 ];
 
+// Fixed platform pricing, mirrored from the backend. Displayed to the sender but
+// never submitted: the server is the single source of truth.
+const EXCHANGE_RATE = 36.5;
+const TRANSFER_FEE = 25;
+
 export default function CreateRemittancePage() {
   const router = useRouter();
   const [checkingAccess, setCheckingAccess] = useState(true);
@@ -34,10 +39,9 @@ export default function CreateRemittancePage() {
   const [remitId, setRemitId] = useState("");
   const [amount, setAmount] = useState("");
   const [sendingCurrency, setSendingCurrency] = useState("AED");
-  const [exchangeRate, setExchangeRate] = useState("");
-  const [fee, setFee] = useState("");
   const [payoutMethod, setPayoutMethod] = useState("bank");
   const [payoutBank, setPayoutBank] = useState("");
+  const [receiverAccountNumber, setReceiverAccountNumber] = useState("");
 
   const [receiver, setReceiver] = useState<Receiver | null>(null);
   const [loadingReceiver, setLoadingReceiver] = useState(false);
@@ -112,7 +116,7 @@ export default function CreateRemittancePage() {
   // ==========================================
 
   const calculatedPayout =
-    Number(amount || 0) * Number(exchangeRate || 0) - Number(fee || 0);
+    Number(amount || 0) * EXCHANGE_RATE - TRANSFER_FEE;
 
   // ==========================================
   // CREATE REMITTANCE
@@ -135,27 +139,18 @@ export default function CreateRemittancePage() {
         return;
       }
 
-      if (
-        !exchangeRate ||
-        !Number.isFinite(Number(exchangeRate)) ||
-        Number(exchangeRate) <= 0
-      ) {
-        setError("Enter a valid exchange rate");
-        return;
-      }
-
-      if (!Number.isFinite(Number(fee || 0))) {
-        setError("Enter a valid fee");
-        return;
-      }
-
-      if (Number(fee || 0) < 0) {
-        setError("Fee cannot be negative");
+      if (Number(amount) * EXCHANGE_RATE - TRANSFER_FEE <= 0) {
+        setError("Amount is too small to cover the transfer fee");
         return;
       }
 
       if (payoutMethod === "bank" && !payoutBank) {
         setError("Choose a receiving bank");
+        return;
+      }
+
+      if (payoutMethod === "bank" && !receiverAccountNumber.trim()) {
+        setError("Enter the receiver's bank account number");
         return;
       }
 
@@ -167,10 +162,10 @@ export default function CreateRemittancePage() {
           receiverRemitId: receiver.remitId,
           amount: Number(amount),
           sendingCurrency,
-          exchangeRate: Number(exchangeRate),
-          fee: Number(fee || 0),
           payoutMethod,
-          ...(payoutMethod === "bank" ? { payoutBank } : {}),
+          ...(payoutMethod === "bank"
+            ? { payoutBank, receiverAccountNumber: receiverAccountNumber.trim() }
+            : {}),
         }),
       });
 
@@ -317,6 +312,72 @@ export default function CreateRemittancePage() {
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-5">
+              {/* Payout Method */}
+
+              <div>
+                <label htmlFor="payoutMethod" className="mb-2 block text-sm font-medium text-gray-700">
+                  Payout Method
+                </label>
+
+                <select
+                  id="payoutMethod"
+                  value={payoutMethod}
+                  onChange={(e) => setPayoutMethod(e.target.value)}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-black outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                >
+                  <option value="bank">Bank</option>
+
+                  <option value="wallet">Wallet</option>
+
+                  <option value="cash">Cash</option>
+                </select>
+              </div>
+
+              {payoutMethod === "bank" && (
+                <div>
+                  <label htmlFor="payoutBank" className="mb-2 block text-sm font-medium text-gray-700">
+                    Receiving Bank
+                  </label>
+                  <select
+                    id="payoutBank"
+                    value={payoutBank}
+                    onChange={(e) => setPayoutBank(e.target.value)}
+                    required
+                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-black outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  >
+                    <option value="">Choose a bank</option>
+                    {DEMO_BANKS.map((bank) => (
+                      <option key={bank} value={bank}>
+                        {bank}
+                      </option>
+                    ))}
+                  </select>
+
+                  <label
+                    htmlFor="receiverAccountNumber"
+                    className="mt-4 mb-2 block text-sm font-medium text-gray-700"
+                  >
+                    Receiver Account Number
+                  </label>
+
+                  <input
+                    id="receiverAccountNumber"
+                    type="text"
+                    inputMode="numeric"
+                    required
+                    value={receiverAccountNumber}
+                    onChange={(e) => setReceiverAccountNumber(e.target.value)}
+                    placeholder="e.g. 0123456789012"
+                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-black outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  />
+
+                  <p className="mt-2 flex items-center gap-1.5 text-xs text-gray-500">
+                    <Landmark className="h-3.5 w-3.5" />
+                    Demo bank options for the hackathon flow.
+                  </p>
+                </div>
+              )}
+
               {/* Amount */}
 
               <div>
@@ -359,91 +420,37 @@ export default function CreateRemittancePage() {
                 </select>
               </div>
 
-              {/* Exchange Rate */}
+              {/* Exchange Rate (fixed platform rate) */}
 
               <div>
-                <label htmlFor="exchangeRate" className="mb-2 block text-sm font-medium text-gray-700">
+                <p className="mb-2 block text-sm font-medium text-gray-700">
                   Exchange Rate
-                </label>
+                </p>
 
-                <input
-                  id="exchangeRate"
-                  type="number"
-                  min="0.0001"
-                  step="0.0001"
-                  required
-                  value={exchangeRate}
-                  onChange={(e) => setExchangeRate(e.target.value)}
-                  placeholder="36.5"
-                  className="w-full border text-black border-gray-300 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-green-500"
-                />
-              </div>
-
-              {/* Fee */}
-
-              <div>
-                <label htmlFor="fee" className="mb-2 block text-sm font-medium text-gray-700">
-                  Transfer Fee (NPR)
-                </label>
-
-                <input
-                  id="fee"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={fee}
-                  onChange={(e) => setFee(e.target.value)}
-                  placeholder="25"
-                  className="w-full border text-black border-gray-300 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-green-500"
-                />
-              </div>
-
-              {/* Payout Method */}
-
-              <div>
-                <label htmlFor="payoutMethod" className="mb-2 block text-sm font-medium text-gray-700">
-                  Payout Method
-                </label>
-
-                <select
-                  id="payoutMethod"
-                  value={payoutMethod}
-                  onChange={(e) => setPayoutMethod(e.target.value)}
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-black outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                >
-                  <option value="bank">Bank</option>
-
-                  <option value="wallet">Wallet</option>
-
-                  <option value="cash">Cash</option>
-                </select>
-              </div>
-
-              {payoutMethod === "bank" && (
-                <div>
-                  <label htmlFor="payoutBank" className="mb-2 block text-sm font-medium text-gray-700">
-                    Receiving Bank
-                  </label>
-                  <select
-                    id="payoutBank"
-                    value={payoutBank}
-                    onChange={(e) => setPayoutBank(e.target.value)}
-                    required
-                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-black outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                  >
-                    <option value="">Choose a bank</option>
-                    {DEMO_BANKS.map((bank) => (
-                      <option key={bank} value={bank}>
-                        {bank}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="mt-2 flex items-center gap-1.5 text-xs text-gray-500">
-                    <Landmark className="h-3.5 w-3.5" />
-                    Demo bank options for the hackathon flow.
-                  </p>
+                <div className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-black">
+                  {EXCHANGE_RATE}
                 </div>
-              )}
+
+                <p className="mt-2 text-xs text-gray-500">
+                  Fixed platform rate — not editable.
+                </p>
+              </div>
+
+              {/* Transfer Fee (fixed platform fee) */}
+
+              <div>
+                <p className="mb-2 block text-sm font-medium text-gray-700">
+                  Transfer Fee
+                </p>
+
+                <div className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-black">
+                  NPR {TRANSFER_FEE}
+                </div>
+
+                <p className="mt-2 text-xs text-gray-500">
+                  Fixed platform fee — not editable.
+                </p>
+              </div>
             </div>
           </section>
 
@@ -468,14 +475,14 @@ export default function CreateRemittancePage() {
               <div className="flex justify-between py-2">
                 <span className="text-emerald-100/75">Exchange Rate</span>
 
-                <span className="font-medium text-white">{exchangeRate || "0"}</span>
+                <span className="font-medium text-white">{EXCHANGE_RATE}</span>
               </div>
 
               <div className="flex justify-between py-2">
                 <span className="text-emerald-100/75">Fee</span>
 
                 <span className="font-medium text-white">
-                  {fee || "0"} NPR
+                  {TRANSFER_FEE} NPR
                 </span>
               </div>
 

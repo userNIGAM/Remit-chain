@@ -6,6 +6,7 @@ import {
   approveRemittance,
   processRemittance,
   readyForPayout,
+  confirmReceipt,
   completePayout,
   commitToBlockchain,
   verifyRemittanceBlockchain,
@@ -77,6 +78,15 @@ router.patch(
   protect,
   requireRole("admin", "supervisor", "agent"),
   readyForPayout,
+);
+
+// The receiver acknowledges the incoming transfer. Receiver-only: this is the
+// customer side of the handshake that must happen before payout.
+router.patch(
+  "/:id/confirm-receipt",
+  protect,
+  requireRole("receiver"),
+  confirmReceipt,
 );
 
 router.post(
