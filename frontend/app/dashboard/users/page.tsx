@@ -90,7 +90,7 @@ export default function UsersPage() {
       setActionLoading(userId);
       setError("");
 
-      await api(`/users/${userId}/verify`);
+      await api(`/users/${userId}/verify`, { method: "PATCH" });
 
       await loadUsers();
     } catch (err: unknown) {
